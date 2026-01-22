@@ -1,0 +1,4 @@
+requests==2.32.5
+python-valve==0.2.1
+psutil==7.2.1
+sv_ttk==2.6.1
