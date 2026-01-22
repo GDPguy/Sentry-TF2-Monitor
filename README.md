@@ -49,6 +49,7 @@ Get a SteamHistory API key (optional):
 
 ## Player Lists
 Sentry uses player lists originally created for [TF2 Bot Detector](https://github.com/PazerOP/tf2_bot_detector)
+
 Place TF2BD player lists in the ./tf2bd/ folder. 
 
 If you want to share your lists for others to use, export your list in TF2BD format from the User List Manager for sharing. Then this list can be used by others using this software and TF2BD.
