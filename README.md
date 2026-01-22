@@ -100,6 +100,6 @@ Use `compile.bat`
 ## Notes / Troubleshooting
 - If Sentry says RCON is unreachable:
   - Verify TF2 is running with the launch options above.
-  - Verify your **RCON password** matches in both TF2 and Sentry.
-  - Verify your **RCON port** matches (default `27015`).
+  - Verify your **RCON password** matches in both your TF2 launch options and Sentry.
+  - Verify your **RCON port** matches (default `27015`) in both your TF2 launch options and Sentry.
   - If the port is in use by another app, change it in Sentry and add `-port <newport>` to TF2 launch options.
