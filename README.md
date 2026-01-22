@@ -60,6 +60,7 @@ sudo apt install python3-tk python3-venv python3-pip
 #### Linux
 In terminal, make start_sentry.sh executable:
 `chmod +x start_sentry.sh`
+
 Then:
 `./start_sentry.sh`
 
@@ -73,7 +74,7 @@ python3 run.py
 ```
 
 #### Windows
-Double-click start_sentry.bat
+Double-click `start_sentry.bat`
 ## Build with PyInstaller 
 The precompiled builds in **Releases** are built using Python 3.13.7, for reproducibility (and with pinned dependencies). 
 #### Linux
