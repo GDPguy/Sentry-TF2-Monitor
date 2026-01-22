@@ -86,8 +86,7 @@ python3 run.py
 
 #### Windows
 Double-click `start_sentry.bat`
-## Build with PyInstaller 
-The precompiled builds in [releases](https://github.com/GDPguy/Sentry-TF2/releases) are built using Python 3.13.7, for reproducibility (and with pinned dependencies). 
+## Build with PyInstaller
 #### Linux
 Use the provided script `compile.sh`
 #### Windows
