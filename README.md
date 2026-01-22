@@ -1,11 +1,11 @@
 # Sentry — TF2 Server Monitor
 
-Sentry is a tool for Team Fortress 2 to monitor in-game players in your current server. It flags suspected cheaters using TF2 Bot Detector/user lists, optionally fetches ban histories of connected players, and automates commands.
+Sentry is a cross-platform tool for Team Fortress 2 to monitor in-game players in your current server. It flags suspected cheaters using TF2 Bot Detector/user lists, optionally fetches ban histories of connected players, and automates commands. It is an alternative to (now unmaintained) [TF2 Bot Detector](https://github.com/PazerOP/tf2_bot_detector) and is compatible with its player lists.
 
 ## Features
 
 - **Cheater detection / tagging**
-  - Uses TF2 Bot Detector lists and your own user list.
+  - Uses TF2 Bot Detector player lists and your own user list.
   - Mark players as **Cheater / Suspicious / Other**.
 - **Notes**
   - Attach custom notes to players
@@ -23,7 +23,7 @@ Sentry is a tool for Team Fortress 2 to monitor in-game players in your current 
 ## Download (Recommended)
 Most users should **download the latest precompiled release**.
 
-1. Go to the **Releases** page and download the newest build for your OS.
+1. Go to [releases](https://github.com/GDPguy/Sentry-TF2/releases) and download the latest build for your OS.
 2. Extract it, and run the Sentry executable.
 
 If the precompiled build doesn’t work on your system, you can run from source instead (see below).
@@ -47,10 +47,14 @@ Settings are saved to:
 Get a SteamHistory API key (optional):
 - https://steamhistory.net/api
 
-## Cheater Lists
-Place Team Fortress 2 Bot Detector lists in the ./tf2bd/ folder. 
+## Player Lists
+Sentry uses player lists originally created for [TF2 Bot Detector](https://github.com/PazerOP/tf2_bot_detector)
+Place TF2BD player lists in the ./tf2bd/ folder. 
 
 If you want to share your lists for others to use, export your list in TF2BD format from the User List Manager for sharing. Then this list can be used by others using this software and TF2BD.
+
+Note: Only Cheater & Suspicious player types will be exported at this time. This software only uses the 'Cheater' and 'Suspicious' attributes from TF2BD lists; exporting players marked 'Other'
+does not cleanly match those attributes. 
 
 ## Run From Source 
 Only use this if you don’t want the precompiled release. This assumes you have Python 3.13 installed, newer versions haven't been tested but probably work just fine.
@@ -82,7 +86,7 @@ python3 run.py
 #### Windows
 Double-click `start_sentry.bat`
 ## Build with PyInstaller 
-The precompiled builds in **Releases** are built using Python 3.13.7, for reproducibility (and with pinned dependencies). 
+The precompiled builds in [releases](https://github.com/GDPguy/Sentry-TF2/releases) are built using Python 3.13.7, for reproducibility (and with pinned dependencies). 
 #### Linux
 Use the provided script `compile.sh`
 #### Windows
