@@ -1,5 +1,3 @@
-# --- START OF FILE run.py ---
-
 import tkinter as tk
 import sv_ttk
 from sentry_app.logic import AppLogic
