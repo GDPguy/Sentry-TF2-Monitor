@@ -35,5 +35,5 @@ if %ERRORLEVEL% NEQ 0 (
 pip install pyinstaller
 pyinstaller --clean --noconfirm --onefile --noconsole --name "%APP_NAME%" "%ENTRY%"
 
-copy /Y THIRD_PARTY_NOTICES.txt dist\%APP_NAME%_THIRD_PARTY_NOTICES.txt >nul
+copy /Y THIRD_PARTY_NOTICES.txt dist\THIRD_PARTY_NOTICES.txt >nul
 endlocal
