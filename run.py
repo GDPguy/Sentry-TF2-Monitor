@@ -1,24 +1,28 @@
-import tkinter as tk
-import sv_ttk
-from sentry_app.logic import AppLogic
-from sentry_app.ui.main_window import MainWindow
+import sys
+import os
+from PySide6.QtWidgets import QApplication
+from PySide6.QtGui import QPalette, QColor, QFont
+from PySide6.QtCore import Qt
 
-from sentry_app.ui.style import apply_ui_scaling, apply_ttk_scaling
+from sentry_app.logic import AppLogic
+from sentry_app.ui.ui_qt_main import MainWindow
 
 def main():
     app_logic = AppLogic()
-    root = tk.Tk()
-    sv_ttk.set_theme("dark")
 
-    scale = app_logic.get_setting_float("UI_Scale")
-    if scale <= 0: scale = 1.0
+    user_scale = app_logic.get_setting_float("UI_Scale")
+    if user_scale <= 0: user_scale = 1.0
 
-    apply_ui_scaling(root, user_scale=scale)
+    app = QApplication(sys.argv)
 
-    apply_ttk_scaling(root, user_scale=scale)
+    font = app.font()
+    font.setPointSizeF(10.0 * user_scale)
+    app.setFont(font)
 
-    app = MainWindow(root, app_logic)
-    root.mainloop()
+    window = MainWindow(app_logic)
+    window.show()
+
+    sys.exit(app.exec())
 
 if __name__ == "__main__":
     main()
