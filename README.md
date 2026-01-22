@@ -41,6 +41,8 @@ Optional:
 
 Then set the same **RCON password**/**port** inside Sentry via **Settings**.
 
+The default password 'yourpassword' should be fine. You do not necessarily need to change it.
+
 ## Configuration
 All settings (RCON password/port, SteamHistory API key, list options, automation, UI scale, etc.) are configurable from the **Settings** button in the GUI.
 Settings are saved to:
