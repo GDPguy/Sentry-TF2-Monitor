@@ -30,4 +30,4 @@ fi
 pip install pyinstaller
 pyinstaller --clean --noconfirm --onefile --name "$APP_NAME" "$ENTRY"
 
-cp -f THIRD_PARTY_NOTICES.txt "dist/${APP_NAME}_THIRD_PARTY_NOTICES.txt"
+cp -f THIRD_PARTY_NOTICES.txt "dist/THIRD_PARTY_NOTICES.txt"
