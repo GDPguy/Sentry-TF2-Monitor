@@ -8,6 +8,7 @@ from .rcon import RConManager
 from .list_manager import ListManager
 from .tf2_monitor import TF2Monitor
 from .utils import convert_steamid3_to_steamid64
+import re
 
 class AppLogic:
     def __init__(self):
@@ -38,6 +39,7 @@ class AppLogic:
         self.session_seen_players = set()
         self.announced_party_cheaters = set()
         self.announced_party_bans = set()
+        self.suspicious_steamids = set()
         self.cached_detected_steamid = None
 
         # Automation State
@@ -57,11 +59,15 @@ class AppLogic:
         self.steamhistory_bans = {}
         self.steamhistory_cache = {}
 
+        # Regex Pre-compilation
+        boundary_roots = ["cheat", "hack", "aimbot", "wallhack"]
+        self.ban_pattern = re.compile(r"\b(" + "|".join(boundary_roots) + r")", re.IGNORECASE)
+        self.ban_tags = ["[stac]", "smac ", "[ac]", "anti-cheat"]
+
         # Initialization
         self.lists.load_all()
         self.auto_detect_steamid()
 
-    # --- Config Wrappers ---
     def get_setting(self, k): return self.cfg.get(k)
     def get_setting_bool(self, k): return self.cfg.get_bool(k)
     def get_setting_float(self, k): return self.cfg.get_float(k)
@@ -76,7 +82,6 @@ class AppLogic:
             if k in ('RCon_Password', 'RCon_Port'):
                 self.rcon.reset()
 
-    # --- Identity ---
     def auto_detect_steamid(self):
         sid = TF2Monitor.detect_steamid_from_process()
         if sid: self.cached_detected_steamid = sid
@@ -90,7 +95,6 @@ class AppLogic:
 
         return self.cached_detected_steamid or self.get_setting('User')
 
-    # --- Main Loop (Data Fetching) ---
     def get_recently_played_snapshot(self):
         with self.state_lock:
             return list(self.recently_played)
@@ -163,12 +167,14 @@ class AppLogic:
             current_ids = set(all_sids)
             self.announced_party_cheaters &= current_ids
             self.announced_party_bans &= current_ids
+            self.suspicious_steamids &= current_ids
 
             self._last_good_g15 = time.monotonic()
 
-        # I/O / network outside lock
         self.update_sourcebans(all_sids)
+        self.analyze_suspicious_sourcebans(all_players)
         self.check_party_announcements(all_players)
+
         return 'lobby_found', red, blue, spec + unassigned
 
     def _reset_state(self):
@@ -181,6 +187,7 @@ class AppLogic:
             self.session_seen_players.clear()
             self.announced_party_cheaters.clear()
             self.announced_party_bans.clear()
+            self.suspicious_steamids.clear()
 
     def _update_last_seen(self, player):
         if player.steamid not in self.session_seen_players:
@@ -188,7 +195,6 @@ class AppLogic:
                 self.lists.touch_user_entry(player.steamid, player.name)
                 self.session_seen_players.add(player.steamid)
 
-    # --- Chat System ---
     def queue_chat(self, msg, chat_type):
         valid_chat_types = {'say', 'tf_party_chat', 'say_team'}
         if chat_type not in valid_chat_types: return
@@ -234,7 +240,6 @@ class AppLogic:
                 if len(self._chat_recent) > 500:
                     self._chat_recent.clear()
 
-    # --- Automation: Kicking & Announcing ---
     def start_automation_thread(self):
         if self._automation_thread and self._automation_thread.is_alive():
             return
@@ -337,6 +342,33 @@ class AppLogic:
             self.queue_chat(msg, "say")
             self.last_announce_time = now
 
+    def analyze_suspicious_sourcebans(self, all_players):
+        with self.state_lock:
+            for p in all_players:
+                if p.steamid in self.suspicious_steamids:
+                    continue
+
+                with self.steamhistory_lock:
+                    bans = self.steamhistory_bans.get(p.steamid, [])
+
+                found_match = False
+                for ban in bans:
+                    if ban.get('CurrentState') == 'Unbanned':
+                        continue
+
+                    reason = ban.get('BanReason', '').lower()
+                    if self.ban_pattern.search(reason):
+                        found_match = True
+                    elif not found_match:
+                        if any(t in reason for t in self.ban_tags):
+                            found_match = True
+
+                    if found_match:
+                        break
+
+                if found_match:
+                    self.suspicious_steamids.add(p.steamid)
+
     def check_party_announcements(self, all_players):
         if self.get_setting_bool("Party_Announce_Cheaters"):
             new_cheaters = []
@@ -352,40 +384,15 @@ class AppLogic:
 
         if self.get_setting_bool("Party_Announce_Bans"):
             new_sus = []
-
-            boundary_roots = ["cheat", "hack", "aimbot", "wallhack"]
-            pattern = re.compile(r"\b(" + "|".join(boundary_roots) + r")", re.IGNORECASE)
-
-            tags = ["[stac]", "smac ", "[ac]", "anti-cheat"]
-
             with self.state_lock:
                 for p in all_players:
-                    if p.steamid in self.announced_party_bans: continue
-
-                    with self.steamhistory_lock:
-                        bans = self.steamhistory_bans.get(p.steamid, [])
-
-                    for ban in bans:
-                        if ban.get('CurrentState') == 'Unbanned':
-                            continue
-
-                        reason = ban.get('BanReason', '').lower()
-
-                        found_match = bool(pattern.search(reason))
-
-                        if not found_match:
-                            if any(t in reason for t in tags):
-                                found_match = True
-
-                        if found_match:
-                            new_sus.append(p.name)
-                            self.announced_party_bans.add(p.steamid)
-                            break
+                    if p.steamid in self.suspicious_steamids and p.steamid not in self.announced_party_bans:
+                        new_sus.append(p.name)
+                        self.announced_party_bans.add(p.steamid)
 
             if new_sus:
                 self.queue_chat(f"[Sentry] Possible cheaters (Sourceban keyword match): {', '.join(new_sus)}", "tf_party_chat")
 
-    # --- SourceBans ---
     def update_sourcebans(self, steamids):
         if not self.get_setting_bool("Enable_Sourcebans_Lookup"): return
         key = self.get_setting("SteamHistory_API_Key")
@@ -446,7 +453,6 @@ class AppLogic:
         with self.steamhistory_lock:
             return self.steamhistory_bans.get(steamid, [])
 
-    # --- UI Helpers ---
     def mark_player(self, steamid, ptype, name=None, notes=None):
         self.lists.save_user_entry(steamid, ptype, notes, player_name=name)
 
