@@ -24,7 +24,9 @@ Sentry is a cross-platform tool for Team Fortress 2 to monitor in-game players i
 Most users should **download the latest precompiled release**.
 
 1. Go to [releases](https://github.com/GDPguy/Sentry-TF2/releases) and download the latest build for your OS.
-2. Extract it, and run the Sentry executable.
+2. Put the executable in a folder named whatever
+(On Linux, in the terminal you should `chmod +x Sentry`)
+When running the executable, /cfg/ and /tf2bd/ folders are created automatically.
 
 If the precompiled build doesn’t work on your system, you can run from source instead (see below).
 
