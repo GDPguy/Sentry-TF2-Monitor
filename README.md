@@ -24,14 +24,14 @@ Sentry is a tool for Team Fortress 2 to monitor in-game players in your current 
 Most users should **download the latest precompiled release**.
 
 1. Go to the **Releases** page and download the newest build for your OS.
-2. Extract it, and run the Sentry executable for your system.
+2. Extract it, and run the Sentry executable.
 
 If the precompiled build doesn’t work on your system, you can run from source instead (see below).
 
 ## TF2 Launch Options (Required)
 Add the following to your TF2 launch options in Steam:
 
-- `-usercon -g15 +ip 0.0.0.0 +rcon_password password +net_start`
+- `-usercon -g15 +ip 0.0.0.0 +rcon_password yourpassword +net_start`
 
 Optional:
 - `-port 27015` (only if another application is already using the default port; set it to whatever you want)
@@ -48,9 +48,10 @@ Get a SteamHistory API key (optional):
 - https://steamhistory.net/api
 
 ## Run From Source 
-Only use this if you don’t want the precompiled release.
+Only use this if you don’t want the precompiled release. This assumes you have Python 3.13 installed, newer versions haven't been tested but probably work just fine.
 
-### Prerequisites (Ubuntu/Debian)
+### Prerequisites (Ubuntu)
+Ubuntu doesn't ship with these preinstalled, so you will have to install them:
 ```bash
 sudo apt update
 sudo apt install python3-tk python3-venv python3-pip
