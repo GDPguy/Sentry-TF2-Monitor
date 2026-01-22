@@ -47,6 +47,11 @@ Settings are saved to:
 Get a SteamHistory API key (optional):
 - https://steamhistory.net/api
 
+## Cheater Lists
+Place Team Fortress 2 Bot Detector lists in the ./tf2bd/ folder. 
+
+If you want to share your lists for others to use, export your list in TF2BD format from the User List Manager for sharing. Then this list can be used by others using this software and TF2BD.
+
 ## Run From Source 
 Only use this if you don’t want the precompiled release. This assumes you have Python 3.13 installed, newer versions haven't been tested but probably work just fine.
 
