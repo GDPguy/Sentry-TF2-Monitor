@@ -16,13 +16,6 @@ jobs:
         with:
           python-version: "3.13"
 
-      - name: Clean previous builds
-        run: |
-          if exist venv rd /s /q venv
-          if exist build rd /s /q build
-          if exist dist rd /s /q dist
-        shell: cmd
-
       - name: Create virtualenv
         run: |
           py -3.13 -m venv venv
