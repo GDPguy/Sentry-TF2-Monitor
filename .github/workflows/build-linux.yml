@@ -34,19 +34,16 @@ jobs:
       - name: Generate THIRD_PARTY_NOTICES
         run: |
           source venv/bin/activate
-
-          # Exclude build-only tools
-          EXCLUDE="pyinstaller|pip-licenses|pip-audit"
-
-          PKGS=$(grep -vE "$EXCLUDE" requirements.txt | cut -d'=' -f1)
-
           pip install pip-licenses
+
+          # Since pip-audit and pyinstaller aren't installed yet, we only need to 
+          # ignore pip-licenses and its dependencies (prettytable, wcwidth).
           pip-licenses \
             --with-urls \
             --with-license-file \
             --with-notice-file \
             --format=plain-vertical \
-            --packages $PKGS \
+            --ignore-packages pip-licenses prettytable wcwidth pip setuptools wheel \
             --output-file THIRD_PARTY_NOTICES.raw.txt
 
           sed -E '/^\//d' THIRD_PARTY_NOTICES.raw.txt > THIRD_PARTY_NOTICES.txt
