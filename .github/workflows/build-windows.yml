@@ -39,21 +39,16 @@ jobs:
       - name: Generate THIRD_PARTY_NOTICES
         run: |
           call venv\Scripts\activate.bat
-
-          rem Exclude build tools
-          set EXCLUDE=pyinstaller pip-licenses pip-audit
-
-          set "PKGS="
-          for /f "delims==" %%a in ('type requirements.txt') do (
-              set "skip=false"
-              for %%x in (%EXCLUDE%) do (
-                  if /i "%%a"=="%%x" set "skip=true"
-              )
-              if "!skip!"=="false" set "PKGS=!PKGS! %%a"
-          )
-
           pip install pip-licenses
-          pip-licenses --with-urls --with-license-file --with-notice-file --format=plain-vertical --packages %PKGS% --output-file THIRD_PARTY_NOTICES.raw.txt
+          
+          pip-licenses ^
+            --with-urls ^
+            --with-license-file ^
+            --with-notice-file ^
+            --format=plain-vertical ^
+            --ignore-packages pip-licenses prettytable wcwidth pip setuptools wheel ^
+            --output-file THIRD_PARTY_NOTICES.raw.txt
+
           findstr /V /R "^[a-zA-Z]:" THIRD_PARTY_NOTICES.raw.txt > THIRD_PARTY_NOTICES.txt
           del THIRD_PARTY_NOTICES.raw.txt
         shell: cmd
