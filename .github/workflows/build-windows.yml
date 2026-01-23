@@ -63,6 +63,7 @@ jobs:
           call venv\Scripts\activate.bat
           pip install pip-audit
           pip-audit -r requirements.txt
+        shell: cmd
 
       - name: Build EXE with PyInstaller
         run: |
