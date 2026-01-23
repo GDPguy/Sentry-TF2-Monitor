@@ -64,7 +64,14 @@ jobs:
         run: |
           call venv\Scripts\activate.bat
           pip install pyinstaller
-          pyinstaller --clean --noconfirm --onefile --noconsole --collect-all PySide6 --name "Sentry" run.py
+          pyinstaller --clean --noconfirm --onefile --noconsole ^
+          --paths "venv/Lib/site-packages" ^
+          --collect-all PySide6 ^
+          --collect-all shiboken6 ^
+          --hidden-import PySide6.QtWidgets ^
+          --hidden-import PySide6.QtCore ^
+          --hidden-import PySide6.QtGui ^
+          --name "Sentry" run.py
         shell: cmd
 
       - name: Copy THIRD_PARTY_NOTICES into dist
