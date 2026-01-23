@@ -110,9 +110,12 @@ class MainWindow(DeselectableWindowMixin, QMainWindow):
             QTimer.singleShot(1000, lambda: custom_popup(self, None, "TF2BD Error", self.logic.lists.tf2bd_error))
 
     def create_team_table(self, title):
-        gb = QGroupBox(title)
-        layout = QVBoxLayout(gb)
+        container = QWidget()
+        layout = QVBoxLayout(container)
         layout.setContentsMargins(0, 0, 0, 0)
+        lbl_title = QLabel(title)
+        lbl_title.setStyleSheet("font-weight: bold; padding-left: 2px;")
+        layout.addWidget(lbl_title)
 
         table = SentryTable()
         cols = ['Name', 'Ping', 'Kills', 'Deaths', 'SteamID', 'Bans', 'Mark', 'Notes']
@@ -140,7 +143,7 @@ class MainWindow(DeselectableWindowMixin, QMainWindow):
 
         layout.addWidget(table)
 
-        return {'container': gb, 'table': table}
+        return {'container': container, 'table': table}
 
     def setup_exclusive_selection(self):
         tables = [self.red_table['table'], self.blue_table['table'], self.spec_table['table']]
@@ -288,10 +291,10 @@ class MainWindow(DeselectableWindowMixin, QMainWindow):
         text = ""
 
         if status == 'tf2_closed':
-            text = "Waiting for TF2 to launch"
+            text = "Waiting for TF2 to launch" + steamid_status_msg
             self.clear_tables()
         elif status == 'lobby_not_found':
-            text = f"RCON connected.{steamid_status_msg}"
+            text = f"RCON connected." + steamid_status_msg
             color = "green"
             self.clear_tables()
         elif status == 'connection_failed':
@@ -300,7 +303,7 @@ class MainWindow(DeselectableWindowMixin, QMainWindow):
             )
             color = "orange"
         elif status == 'banned':
-            text = "RCON Banned (Restart TF2)"
+            text = "RCON Banned (Restart TF2)" + steamid_status_msg
             color = "red"
             self.clear_tables()
         elif status == 'auth_failed':
