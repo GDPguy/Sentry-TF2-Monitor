@@ -1,4 +1,4 @@
-name: Windows Build (cx Freeze)
+name: Windows Build (nuitka)
 
 on:
   workflow_dispatch: {}
@@ -59,12 +59,15 @@ jobs:
           pip install pip-audit
           pip-audit -r requirements.txt
         shell: cmd
-
-      - name: Build EXE with cx_Freeze
+      
+      - name: Build EXE with Nuitka
         run: |
           call venv\Scripts\activate.bat
-          pip install cx_Freeze
-          python -c "from cx_Freeze import setup, Executable; setup(name='Sentry', executables=[Executable('run.py', base='Win32GUI', target_name='Sentry.exe')])"
+          pip install nuitka ordered-set zstandard
+          
+          python -m nuitka --onefile --windows-disable-console ^
+          --enable-plugin=pyside6 ^
+          --output-filename=Sentry.exe run.py
         shell: cmd
 
       - name: Copy THIRD_PARTY_NOTICES into dist
