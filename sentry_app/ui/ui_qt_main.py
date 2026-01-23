@@ -112,9 +112,12 @@ class MainWindow(DeselectableWindowMixin, QMainWindow):
     def create_team_table(self, title):
         container = QWidget()
         layout = QVBoxLayout(container)
-        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setContentsMargins(0, 0, 0, 5)
         lbl_title = QLabel(title)
-        lbl_title.setStyleSheet("font-weight: bold; padding-left: 2px;")
+        font = lbl_title.font()
+        font.setBold(True)
+        lbl_title.setFont(font)
+        lbl_title.setIndent(2)
         layout.addWidget(lbl_title)
 
         table = SentryTable()
