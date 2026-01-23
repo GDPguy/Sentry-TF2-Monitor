@@ -67,7 +67,7 @@ class MainWindow(DeselectableWindowMixin, QMainWindow):
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
         main_layout = QVBoxLayout(central_widget)
-        main_layout.setContentsMargins(5, 0, 0, 0)
+        main_layout.setContentsMargins(5, 0, 5, 0)
 
         top_bar = QHBoxLayout()
         top_bar.setContentsMargins(5, 5, 5, 0)
