@@ -64,15 +64,7 @@ jobs:
         run: |
           call venv\Scripts\activate.bat
           pip install pyinstaller
-          pyinstaller --clean --noconfirm --onefile --noconsole ^
-          --paths "venv/Lib/site-packages" ^
-          --collect-data PySide6 ^
-          --collect-binaries PySide6 ^
-          --copy-metadata PySide6 ^
-          --hidden-import PySide6.QtWidgets ^
-          --hidden-import PySide6.QtCore ^
-          --hidden-import PySide6.QtGui ^
-          --name "Sentry" run.py
+          pyinstaller --clean --noconfirm --name "Sentry" run.py
         shell: cmd
 
       - name: Copy THIRD_PARTY_NOTICES into dist
@@ -85,5 +77,5 @@ jobs:
         with:
           name: Sentry-Windows
           path: |
-            dist/*.exe
+            dist/Sentry/*
             dist/THIRD_PARTY_NOTICES.txt
