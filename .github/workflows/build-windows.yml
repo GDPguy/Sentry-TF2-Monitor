@@ -64,7 +64,7 @@ jobs:
         run: |
           call venv\Scripts\activate.bat
           pip install pyinstaller
-          pyinstaller --clean --noconfirm --onefile --noconsole --name "Sentry" run.py
+          pyinstaller --clean --noconfirm --onefile --noconsole --collect-all PySide6 --name "Sentry" run.py
         shell: cmd
 
       - name: Copy THIRD_PARTY_NOTICES into dist
