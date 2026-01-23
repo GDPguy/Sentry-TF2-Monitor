@@ -260,7 +260,6 @@ class MainWindow(DeselectableWindowMixin, QMainWindow):
     def _data_worker(self):
         try:
             res = self.logic.get_players()
-            res = copy.deepcopy(res)
         except Exception as e:
             print(f"Error in data worker: {e}")
             res = ('connection_failed', [], [], [])
@@ -365,8 +364,8 @@ class MainWindow(DeselectableWindowMixin, QMainWindow):
         for p in players:
             processed_sids.add(p.steamid)
 
-            bans = str(self.logic.get_sourcebans_count(p.steamid))
-            mark = self.logic.lists.get_mark_label(p.steamid)
+            bans = str(p.ban_count)
+            mark = p.mark_label
 
             bg_color = None
             if p.steamid == my_sid: bg_color = c_self
