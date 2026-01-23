@@ -58,7 +58,7 @@ jobs:
         run: |
           source venv/bin/activate
           pip install pip-audit
-          pip-audit -r requirements.txt --fail-on high
+          pip-audit --fail-on high
 
       - name: Build EXE with PyInstaller
         run: |
