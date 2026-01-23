@@ -66,7 +66,15 @@ jobs:
           pip install cx_Freeze
           python setup.py build
         shell: cmd
-      
+        
+      - name: List all files
+        run: |
+          echo "Contents of current directory:"
+          dir
+          echo "Contents of build directory:"
+          dir build /s
+        shell: cmd
+        
       - name: Copy THIRD_PARTY_NOTICES
         run: |
           for /d %%i in (build\exe.*) do copy /Y THIRD_PARTY_NOTICES.txt "%%i\THIRD_PARTY_NOTICES.txt"
