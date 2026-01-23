@@ -151,6 +151,8 @@ class AppLogic:
         for p in all_players:
             p.player_type = self.lists.identify_player_type(p.steamid)
             p.notes = self.lists.get_user_notes(p.steamid)
+            p.mark_label = self.lists.get_mark_label(p.steamid)
+            p.ban_count = self.get_sourcebans_count(p.steamid)
 
         with self.state_lock:
             self.user_current_team = local_team
@@ -171,11 +173,13 @@ class AppLogic:
 
             self._last_good_g15 = time.monotonic()
 
+            pdata = ('lobby_found', list(red), list(blue), list(spec + unassigned))
+
         self.update_sourcebans(all_sids)
         self.analyze_suspicious_sourcebans(all_players)
         self.check_party_announcements(all_players)
 
-        return 'lobby_found', red, blue, spec + unassigned
+        return pdata
 
     def _reset_state(self):
         with self.state_lock:
