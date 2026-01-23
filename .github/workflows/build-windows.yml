@@ -64,22 +64,23 @@ jobs:
         run: |
           call venv\Scripts\activate.bat
           pip install nuitka ordered-set zstandard
-          # --windows-console-mode=disable
           python -m nuitka --onefile ^
+          --windows-disable-console ^
           --enable-plugin=pyside6 ^
           --assume-yes-for-downloads ^
+          --output-dir=dist ^
           --output-filename=Sentry.exe run.py
         shell: cmd
-
+      
       - name: Copy THIRD_PARTY_NOTICES into dist
         run: |
           copy /Y THIRD_PARTY_NOTICES.txt dist\THIRD_PARTY_NOTICES.txt
         shell: cmd
-
+      
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
           name: Sentry-Windows
           path: |
-            dist/Sentry/*
+            dist/Sentry.exe
             dist/THIRD_PARTY_NOTICES.txt
