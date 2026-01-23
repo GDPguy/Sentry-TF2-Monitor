@@ -58,7 +58,6 @@ jobs:
           source venv/bin/activate
           pip install pyinstaller
           pyinstaller --clean --noconfirm --onefile --name "Sentry" run.py
-        shell: cmd
 
       - name: Copy THIRD_PARTY_NOTICES
         run: |
