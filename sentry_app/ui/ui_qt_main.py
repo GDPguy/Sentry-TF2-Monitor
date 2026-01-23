@@ -124,7 +124,7 @@ class MainWindow(DeselectableWindowMixin, QMainWindow):
         cols = ['Name', 'Ping', 'Kills', 'Deaths', 'SteamID', 'Bans', 'Mark', 'Notes']
         table.setColumnCount(len(cols))
         table.setHorizontalHeaderLabels(cols)
-
+        table.verticalHeader().setDefaultSectionSize(self.px(24))
         table.setSortingEnabled(True)
 
         header = table.horizontalHeader()
