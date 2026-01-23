@@ -12,11 +12,11 @@ build_exe_options = {
     "include_files": [],
 }
 
-base = "Win32GUI" if sys.platform == "win32" else None
+base = "gui" if sys.platform == "win32" else None
 
 setup(
     name="Sentry",
-    version="1.0",
+    version="1.0.0",
     description="Sentry Application",
     options={"build_exe": build_exe_options},
     executables=[Executable("run.py", base=base, target_name="Sentry.exe")]
