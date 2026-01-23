@@ -26,7 +26,7 @@ Most users should **download the latest precompiled release**.
 
 1. Go to [releases](https://github.com/GDPguy/Sentry-TF2/releases) and download the latest build for your OS.
 2. Extract to a folder
-(On Linux, in the terminal you should `chmod +x Sentry`)
+(On Linux, in the terminal you might need to `chmod +x Sentry`)
 
 When running the executable, /cfg/ and /tf2bd/ folders are created automatically.
 
