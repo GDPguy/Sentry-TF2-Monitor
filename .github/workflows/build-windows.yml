@@ -60,11 +60,11 @@ jobs:
           pip-audit -r requirements.txt
         shell: cmd
 
-      - name: Build EXE with PyInstaller
+      - name: Build EXE with cx_Freeze
         run: |
           call venv\Scripts\activate.bat
-          pip install pyinstaller
-          pyinstaller --clean --noconfirm --name "Sentry" run.py
+          pip install cx_Freeze
+          python -c "from cx_Freeze import setup, Executable; setup(name='Sentry', executables=[Executable('run.py', base='Win32GUI', target_name='Sentry.exe')])"
         shell: cmd
 
       - name: Copy THIRD_PARTY_NOTICES into dist
