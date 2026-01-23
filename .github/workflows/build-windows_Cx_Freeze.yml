@@ -67,15 +67,13 @@ jobs:
           python setup.py build
         shell: cmd
       
-      - name: Copy THIRD_PARTY_NOTICES into build
+      - name: Copy THIRD_PARTY_NOTICES
         run: |
           for /d %%i in (build\exe.*) do copy /Y THIRD_PARTY_NOTICES.txt "%%i\THIRD_PARTY_NOTICES.txt"
         shell: cmd
-
+      
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
           name: Sentry-Windows
-          path: |
-            name: Sentry-Windows
-            path: build/exe.*/*
+          path: build/
