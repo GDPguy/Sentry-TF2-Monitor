@@ -66,8 +66,9 @@ jobs:
           pip install pyinstaller
           pyinstaller --clean --noconfirm --onefile --noconsole ^
           --paths "venv/Lib/site-packages" ^
-          --collect-all PySide6 ^
-          --collect-all shiboken6 ^
+          --collect-data PySide6 ^
+          --collect-binaries PySide6 ^
+          --copy-metadata PySide6 ^
           --hidden-import PySide6.QtWidgets ^
           --hidden-import PySide6.QtCore ^
           --hidden-import PySide6.QtGui ^
