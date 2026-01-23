@@ -55,7 +55,7 @@ jobs:
       - name: Security audit (fail on high)
         run: |
           source venv/bin/activate
-          pip install pip-audit
+          python -m pip install -U pip pip-audit
           python -m pip-audit --fail-on high
 
       - name: Build EXE with PyInstaller
