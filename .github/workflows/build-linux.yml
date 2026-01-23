@@ -36,8 +36,6 @@ jobs:
           source venv/bin/activate
           pip install pip-licenses
 
-          # Since pip-audit and pyinstaller aren't installed yet, we only need to 
-          # ignore pip-licenses and its dependencies (prettytable, wcwidth).
           pip-licenses \
             --with-urls \
             --with-license-file \
