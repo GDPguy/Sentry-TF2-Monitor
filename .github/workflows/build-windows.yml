@@ -1,4 +1,4 @@
-name: Windows Build (PyInstaller)
+name: Windows Build (cx Freeze)
 
 on:
   workflow_dispatch: {}
