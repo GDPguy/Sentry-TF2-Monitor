@@ -15,7 +15,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.13"
 
       - name: Clean previous builds
         run: |
@@ -36,7 +36,10 @@ jobs:
         run: |
           source venv/bin/activate
 
-          PKGS=$(pip freeze | cut -d'=' -f1)
+          # Exclude build-only tools
+          EXCLUDE="pyinstaller|pip-licenses|pip-audit"
+
+          PKGS=$(grep -vE "$EXCLUDE" requirements.txt | cut -d'=' -f1)
 
           pip install pip-licenses
           pip-licenses \
@@ -50,13 +53,13 @@ jobs:
           sed -E '/^\//d' THIRD_PARTY_NOTICES.raw.txt > THIRD_PARTY_NOTICES.txt
           rm -f THIRD_PARTY_NOTICES.raw.txt
 
-      - name: Security audit (non-fatal)
+      - name: Security audit (fail on high)
         run: |
           source venv/bin/activate
           pip install pip-audit
-          pip-audit -r requirements.txt || echo "WARNING: vulnerabilities found"
+          pip-audit -r requirements.txt --fail-on high
 
-      - name: Build with PyInstaller
+      - name: Build EXE with PyInstaller
         run: |
           source venv/bin/activate
           pip install pyinstaller
