@@ -40,13 +40,34 @@ jobs:
         run: |
           call venv\Scripts\activate.bat
           pip install pip-licenses
-          
-          pip-licenses ^
-            --with-urls ^
-            --with-license-file ^
-            --with-notice-file ^
-            --format=plain-vertical ^
-            --ignore-packages pip-licenses prettytable wcwidth pip setuptools wheel ^
-            --output-file THIRD_PARTY_NOTICES.raw.txt
+          pip-licenses --with-urls --with-license-file --with-notice-file --format=plain-vertical --ignore-packages pip-licenses prettytable wcwidth pip setuptools wheel --output-file THIRD_PARTY_NOTICES.raw.txt
           findstr /V /R "^[a-zA-Z]:" THIRD_PARTY_NOTICES.raw.txt > THIRD_PARTY_NOTICES.txt
           del THIRD_PARTY_NOTICES.raw.txt
+        shell: cmd
+
+      - name: Security audit
+        run: |
+          call venv\Scripts\activate.bat
+          pip install pip-audit
+          pip-audit -r requirements.txt
+        shell: cmd
+
+      - name: Build EXE with PyInstaller
+        run: |
+          call venv\Scripts\activate.bat
+          pip install pyinstaller
+          pyinstaller --clean --noconfirm --onefile --noconsole --name "Sentry" run.py
+        shell: cmd
+
+      - name: Copy THIRD_PARTY_NOTICES
+        run: |
+          copy /Y THIRD_PARTY_NOTICES.txt dist\THIRD_PARTY_NOTICES.txt
+        shell: cmd
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Sentry-Windows
+          path: |
+            dist/Sentry.exe
+            dist/THIRD_PARTY_NOTICES.txt
