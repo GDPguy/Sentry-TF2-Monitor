@@ -1,0 +1,81 @@
+name: Windows Build (cx_freeze)
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Clean previous builds
+        run: |
+          if exist venv rd /s /q venv
+          if exist build rd /s /q build
+          if exist dist rd /s /q dist
+        shell: cmd
+
+      - name: Create virtualenv
+        run: |
+          py -3.13 -m venv venv
+          call venv\Scripts\activate.bat
+          python -m pip install -U pip
+        shell: cmd
+
+      - name: Install dependencies
+        run: |
+          call venv\Scripts\activate.bat
+          pip install -r requirements.txt
+        shell: cmd
+
+      - name: Generate THIRD_PARTY_NOTICES
+        run: |
+          call venv\Scripts\activate.bat
+          pip install pip-licenses
+          
+          pip-licenses ^
+            --with-urls ^
+            --with-license-file ^
+            --with-notice-file ^
+            --format=plain-vertical ^
+            --ignore-packages pip-licenses prettytable wcwidth pip setuptools wheel ^
+            --output-file THIRD_PARTY_NOTICES.raw.txt
+
+          findstr /V /R "^[a-zA-Z]:" THIRD_PARTY_NOTICES.raw.txt > THIRD_PARTY_NOTICES.txt
+          del THIRD_PARTY_NOTICES.raw.txt
+        shell: cmd
+
+      - name: Security audit
+        run: |
+          call venv\Scripts\activate.bat
+          pip install pip-audit
+          pip-audit -r requirements.txt
+        shell: cmd
+            
+      - name: Build EXE with cx_Freeze
+        run: |
+          call venv\Scripts\activate.bat
+          pip install cx_Freeze
+          python setup.py build
+        shell: cmd
+      
+      - name: Copy THIRD_PARTY_NOTICES into build
+        run: |
+          for /d %%i in (build\exe.*) do copy /Y THIRD_PARTY_NOTICES.txt "%%i\THIRD_PARTY_NOTICES.txt"
+        shell: cmd
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Sentry-Windows
+          path: |
+            name: Sentry-Windows
+            path: build/exe.*/*
