@@ -16,10 +16,6 @@ jobs:
         with:
           python-version: "3.13"
 
-      - name: Clean previous builds
-        run: |
-          rm -rf venv build dist
-
       - name: Create virtualenv
         run: |
           python3 -m venv venv
