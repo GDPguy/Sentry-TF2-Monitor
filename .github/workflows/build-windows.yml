@@ -25,7 +25,7 @@ jobs:
 
       - name: Create virtualenv
         run: |
-          py -3.12 -m venv venv
+          py -3.13 -m venv venv
           call venv\Scripts\activate.bat
           python -m pip install -U pip
         shell: cmd
@@ -64,9 +64,10 @@ jobs:
         run: |
           call venv\Scripts\activate.bat
           pip install nuitka ordered-set zstandard
-          
-          python -m nuitka --onefile --windows-disable-console ^
+          # --windows-console-mode=disable
+          python -m nuitka --onefile ^
           --enable-plugin=pyside6 ^
+          --assume-yes-for-downloads ^
           --output-filename=Sentry.exe run.py
         shell: cmd
 
