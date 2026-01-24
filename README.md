@@ -40,6 +40,7 @@ Add the following to your TF2 launch options in Steam:
 - `-usercon -g15 +ip 0.0.0.0 +rcon_password yourpassword +net_start`
 
 Optional:
+- ` +sv_rcon_whitelist_address 127.0.0.1` (prevents being banned by rcon on too many failed attempts)
 - `-port 27015` (only if another application is already using the default port; set it to whatever you want)
 
 Then set the same **RCON password**/**port** inside Sentry via **Settings**.
