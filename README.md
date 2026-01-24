@@ -70,7 +70,7 @@ Only use this if you don’t want the precompiled release. This assumes you have
 Ubuntu doesn't ship with these preinstalled, so you will have to install them:
 ```bash
 sudo apt update
-sudo apt install python3-tk python3-venv python3-pip
+sudo apt install python3-venv python3-pip
 ```
 
 ### Setup
