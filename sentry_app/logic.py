@@ -14,12 +14,10 @@ class AppLogic:
     def __init__(self):
         self.state_lock = threading.RLock()
 
-        # Sub-Managers
         self.cfg = ConfigManager()
         self.rcon = RConManager(self.cfg)
         self.lists = ListManager(self.cfg, self.state_lock)
 
-        # Runtime Player State
         self.connected_red_players = []
         self.connected_blue_players = []
         self.connected_spectator_players = []
@@ -27,7 +25,6 @@ class AppLogic:
         self.user_current_team = None
         self.recently_played = []
 
-        # Chat Queue System
         self.chat_queue = deque()
         self._chat_pending = set()
         self._chat_recent = {}
@@ -35,36 +32,30 @@ class AppLogic:
         self.chat_delay = 1.0
         self._chat_recent_ttl = 5.0
 
-        # Tracking / Caches
         self.session_seen_players = set()
         self.announced_party_cheaters = set()
         self.announced_party_bans = set()
         self.suspicious_steamids = set()
         self.cached_detected_steamid = None
 
-        # Automation State
         self.last_kick_time = 0.0
         self.last_announce_time = 0.0
         self.automation_lock = threading.Lock()
         self._automation_stop = threading.Event()
         self._automation_thread = None
-        self._last_good_g15 = 0.
+        self._last_good_g15 = 0.0
 
-        # Other
         self._kick_lock = threading.Lock()
         self.tf2_running = False
 
-        # SteamHistory / SourceBans
         self.steamhistory_lock = threading.Lock()
         self.steamhistory_bans = {}
         self.steamhistory_cache = {}
 
-        # Regex Pre-compilation
         boundary_roots = ["cheat", "hack", "aimbot", "wallhack"]
         self.ban_pattern = re.compile(r"\b(" + "|".join(boundary_roots) + r")", re.IGNORECASE)
         self.ban_tags = ["[stac]", "smac ", "[ac]", "anti-cheat"]
 
-        # Initialization
         self.lists.load_all()
         self.auto_detect_steamid()
 
