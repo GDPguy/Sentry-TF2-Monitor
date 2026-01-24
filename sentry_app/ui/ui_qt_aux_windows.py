@@ -238,8 +238,12 @@ class UserListWindow(BaseAuxWindow):
         self.table.setSortingEnabled(True)
 
     def export_list(self):
-        fn, _ = QFileDialog.getSaveFileName(self, "Export TF2BD", "", "JSON Files (*.json)")
+        fn, _ = QFileDialog.getSaveFileName(self, "Export TF2BD", "playerlist.sentry_export.json", "JSON Files (*.json)")
+
         if fn:
+            if not fn.lower().endswith(".json"):
+                fn += ".json"
+
             ok, msg = self.logic.lists.export_to_tf2bd(fn)
             custom_popup(self, None, "Export Result", msg)
 
