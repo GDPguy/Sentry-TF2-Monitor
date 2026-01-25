@@ -1,4 +1,4 @@
-APP_VERSION = "0.4.2"
+APP_VERSION = "0.9.0"
 
 DEFAULT_SETTINGS = {
     'User': '[U:1:XXXXXXXXXX]',
