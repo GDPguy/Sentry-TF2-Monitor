@@ -1,5 +1,3 @@
-# --- START OF FILE sentry_app/list_manager.py ---
-
 import os
 import json
 import time
@@ -301,8 +299,15 @@ class ListManager:
         if steamid not in self.tf2bd_data: return "No TF2BD data."
         d = self.tf2bd_data[steamid]
         lines = []
+        if 'sources' in d:
+            lines.append(f"Source List(s): {', '.join(d['sources'])}")
         lines.append(f"Attributes: {', '.join(d.get('attributes', []))}")
-        if 'proof' in d: lines.append(f"Proof: {d['proof']}")
+        if 'proof' in d:
+            proof = d['proof']
+            if isinstance(proof, list):
+                lines.append(f"Proof: {'; '.join(proof)}")
+            else:
+                lines.append(f"Proof: {proof}")
         if 'last_seen' in d:
              ls = d['last_seen']
              ts = datetime.datetime.fromtimestamp(ls.get('time', 0))
