@@ -2,7 +2,7 @@
 
 Sentry is a cross-platform tool for Team Fortress 2 to monitor in-game players in your current server. It flags cheaters using TF2 Bot Detector/user lists, fetches ban histories of connected players (also keyword matches bans for cheating), and automates commands. It is an alternative to (now unmaintained) [TF2 Bot Detector](https://github.com/PazerOP/tf2_bot_detector) and is compatible with its player lists.
 
-<img width="516" height="554.5" alt="window" src="https://github.com/user-attachments/assets/39a73026-b703-462a-ad58-cd01d8672eee" />
+<img width="516" height="554.5" alt="window" src="https://github.com/user-attachments/assets/26fd5b53-8ea1-4d4d-8091-638addffd86f" />
 
 
 <sub>matches system theme, will look different on different platforms/light mode</sub>
