@@ -1,0 +1,15 @@
+__pycache__/
+*.pyc
+cfg/
+tf2bd_lists/
+.*.kate-swp
+*.kate-swp
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store
+Thumbs.db
+settings.ini
+Sentry
+Sentry.exe

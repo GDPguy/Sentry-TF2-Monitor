@@ -9,6 +9,7 @@ from .list_manager import ListManager
 from .tf2_monitor import TF2Monitor
 from .utils import convert_steamid3_to_steamid64
 import re
+import concurrent.futures
 
 class AppLogic:
     def __init__(self):
@@ -52,6 +53,10 @@ class AppLogic:
         self.steamhistory_bans = {}
         self.steamhistory_cache = {}
 
+        self.steam_api_lock = threading.Lock()
+        self.steam_api_cache = {}
+        self.api_executor = concurrent.futures.ThreadPoolExecutor(max_workers=10)
+
         boundary_roots = ["cheat", "hack", "aimbot", "wallhack"]
         self.ban_pattern = re.compile(r"\b(" + "|".join(boundary_roots) + r")", re.IGNORECASE)
         self.ban_tags = ["[stac]", "smac ", "[ac]", "anti-cheat"]
@@ -89,6 +94,109 @@ class AppLogic:
     def get_recently_played_snapshot(self):
         with self.state_lock:
             return list(self.recently_played)
+
+    def update_steam_api_data(self, steamids):
+        api_key = self.get_setting("Steam_API_Key")
+        if not api_key or len(api_key) < 10: return
+
+        now = time.monotonic()
+        to_query_summary = []
+        to_query_bans = []
+        to_query_playtime = []
+
+        with self.steam_api_lock:
+            for sid in steamids:
+                entry = self.steam_api_cache.get(sid, {})
+                last = entry.get('last_update', 0)
+
+                if (now - last) > 1800:
+                    to_query_summary.append(sid)
+                    to_query_bans.append(sid)
+
+                if 'playtime' not in entry:
+                    to_query_playtime.append(sid)
+
+        def get_map(sids):
+            m = {}
+            for s in sids:
+                s64 = convert_steamid3_to_steamid64(s)
+                if s64: m[str(s64)] = s
+            return m
+
+        if to_query_summary or to_query_bans:
+            threading.Thread(target=self._worker_batch_api,
+                             args=(api_key, get_map(to_query_summary), get_map(to_query_bans)),
+                             daemon=True).start()
+
+        sid_map_play = get_map(to_query_playtime[:32])
+        for s64, sid3 in sid_map_play.items():
+            with self.steam_api_lock:
+                if 'playtime' not in self.steam_api_cache.setdefault(sid3, {}):
+                    self.steam_api_cache[sid3]['playtime'] = None # Placeholder
+
+            self.api_executor.submit(self._worker_single_playtime, api_key, s64, sid3)
+
+    def _worker_batch_api(self, key, map_summ, map_bans):
+        if map_summ:
+            try:
+                ids = list(map_summ.keys())
+                for i in range(0, len(ids), 100):
+                    chunk = ids[i:i+100]
+                    r = requests.get("http://api.steampowered.com/ISteamUser/GetPlayerSummaries/v0002/",
+                                     params={'key': key, 'steamids': ",".join(chunk)}, timeout=5)
+                    for p in r.json().get('response', {}).get('players', []):
+                        sid3 = map_summ.get(p['steamid'])
+                        if sid3:
+                            with self.steam_api_lock:
+                                e = self.steam_api_cache.setdefault(sid3, {})
+                                e['avatar'] = p.get('avatar')
+                                e['last_update'] = time.monotonic()
+            except Exception: pass
+
+        if map_bans:
+            try:
+                ids = list(map_bans.keys())
+                for i in range(0, len(ids), 100):
+                    chunk = ids[i:i+100]
+                    r = requests.get("http://api.steampowered.com/ISteamUser/GetPlayerBans/v1/",
+                                     params={'key': key, 'steamids': ",".join(chunk)}, timeout=5)
+                    for b in r.json().get('players', []):
+                        sid3 = map_bans.get(b['SteamId'])
+                        if sid3:
+                            with self.steam_api_lock:
+                                e = self.steam_api_cache.setdefault(sid3, {})
+                                e['vac'] = b.get('VACBanned', False)
+                                e['game_bans'] = b.get('NumberOfGameBans', 0)
+            except Exception: pass
+
+    def _worker_single_playtime(self, key, s64, sid3):
+        try:
+            r = requests.get("http://api.steampowered.com/IPlayerService/GetOwnedGames/v0001/",
+                             params={'key': key, 'steamid': s64, 'format': 'json',
+                                     'include_played_free_games': 1, 'appids_filter[0]': 440}, timeout=5)
+
+            data = r.json().get('response', {})
+            val = None
+
+            if 'games' in data:
+                games = data.get('games', [])
+                tf2 = next((g for g in games if g['appid'] == 440), None)
+
+                if tf2:
+                    minutes = tf2.get('playtime_forever', 0)
+                    if minutes > 0:
+                        val = minutes
+                    else:
+                        val = None # if they are in game, their minutes are likely not 0, so we assume game details/total playtime was set to private
+
+            with self.steam_api_lock:
+                self.steam_api_cache.setdefault(sid3, {})['playtime'] = val
+
+        except Exception:
+            with self.steam_api_lock:
+                 if sid3 in self.steam_api_cache:
+                     self.steam_api_cache[sid3].pop('playtime', None)
+
 
     def get_players(self):
         running = TF2Monitor.is_process_running()
@@ -138,12 +246,19 @@ class AppLogic:
 
         all_players = red + blue + spec + unassigned
         all_sids = [p.steamid for p in all_players]
+        self.update_steam_api_data(all_sids)
 
         for p in all_players:
             p.player_type = self.lists.identify_player_type(p.steamid)
             p.notes = self.lists.get_user_notes(p.steamid)
             p.mark_label = self.lists.get_mark_label(p.steamid)
             p.ban_count = self.get_sourcebans_count(p.steamid)
+
+            api_data = self.steam_api_cache.get(p.steamid, {})
+            p.avatar_url = api_data.get('avatar')
+            p.vac_banned = api_data.get('vac', False)
+            p.game_bans = api_data.get('game_bans', 0)
+            p.tf2_playtime = api_data.get('playtime')
 
         with self.state_lock:
             self.user_current_team = local_team

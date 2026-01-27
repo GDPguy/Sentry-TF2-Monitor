@@ -74,6 +74,18 @@ class SettingsWindow(QDialog):
         grp_ext = QGroupBox("Internet / API")
         lay_ext = QFormLayout(grp_ext)
 
+        self.vars['Steam_API_Key'] = QLineEdit(self.logic.get_setting('Steam_API_Key'))
+        self.vars['Steam_API_Key'].setEchoMode(QLineEdit.Password)
+
+        btn_show_skey = QPushButton("Show")
+        btn_show_skey.setFixedWidth(self.px(80))
+        btn_show_skey.clicked.connect(lambda: self.toggle_echo(self.vars['Steam_API_Key'], btn_show_skey))
+
+        hb_skey = QHBoxLayout()
+        hb_skey.addWidget(self.vars['Steam_API_Key'])
+        hb_skey.addWidget(btn_show_skey)
+        lay_ext.addRow("Steam Web API Key:", hb_skey)
+
         self.vars['SteamHistory_API_Key'] = QLineEdit(self.logic.get_setting('SteamHistory_API_Key'))
         self.vars['SteamHistory_API_Key'].setEchoMode(QLineEdit.Password)
 

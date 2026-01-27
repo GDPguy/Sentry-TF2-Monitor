@@ -1,10 +1,11 @@
-APP_VERSION = "0.9.0"
+APP_VERSION = "1.0.0"
 
 DEFAULT_SETTINGS = {
     'User': '[U:1:XXXXXXXXXX]',
     'Use_Manual_SteamID': 'False',
     'RCon_Password': 'yourpassword',
     'RCon_Port': '27015',
+    'Steam_API_Key': '',
     'SteamHistory_API_Key': '',
     'Enable_Sourcebans_Lookup': 'False',
     'Auto_Update_TF2BD_Lists': 'False',

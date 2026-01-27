@@ -11,16 +11,13 @@ from ..utils import convert_steamid3_to_steamid64
 
 class NumericTableWidgetItem(QTableWidgetItem):
     def __lt__(self, other):
-        try:
-            t1 = self.text().replace('!', '').strip()
-            t2 = other.text().replace('!', '').strip()
+        d1 = self.data(Qt.UserRole)
+        d2 = other.data(Qt.UserRole)
 
-            v1 = float(t1) if t1 and t1 != "-" else -1.0
-            v2 = float(t2) if t2 and t2 != "-" else -1.0
+        v1 = float(d1) if d1 is not None else -1.0
+        v2 = float(d2) if d2 is not None else -1.0
 
-            return v1 < v2
-        except ValueError:
-            return super().__lt__(other)
+        return v1 < v2
 
 class TextViewer(QDialog):
     def __init__(self, parent, title, text):
