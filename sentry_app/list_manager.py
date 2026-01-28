@@ -123,6 +123,7 @@ class ListManager:
         try:
             with open(fpath, 'r', encoding='utf-8') as f:
                 data = json.load(f)
+
             url = data.get('file_info', {}).get('update_url')
             if not url: return
 
@@ -134,7 +135,10 @@ class ListManager:
             new_hash = hashlib.sha256(json.dumps(new_data, sort_keys=True).encode()).hexdigest()
 
             if old_hash != new_hash:
-                new_data['file_info'] = data.get('file_info', {})
+                if 'file_info' not in new_data:
+                    new_data['file_info'] = {}
+                if 'update_url' not in new_data['file_info']:
+                    new_data['file_info']['update_url'] = url
 
                 json_bytes = json.dumps(new_data, indent=2).encode('utf-8')
                 atomic_write_bytes(fpath, json_bytes)

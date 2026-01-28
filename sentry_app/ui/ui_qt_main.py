@@ -404,7 +404,6 @@ class MainWindow(DeselectableWindowMixin, QMainWindow):
         def update_cell(r, c, text_val, sort_val=None, bg=None, is_numeric=False):
             item = table.item(r, c)
 
-            # Create item if missing
             if not item:
                 if is_numeric:
                     item = NumericTableWidgetItem(str(text_val))

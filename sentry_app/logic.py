@@ -132,7 +132,7 @@ class AppLogic:
         for s64, sid3 in sid_map_play.items():
             with self.steam_api_lock:
                 if 'playtime' not in self.steam_api_cache.setdefault(sid3, {}):
-                    self.steam_api_cache[sid3]['playtime'] = None # Placeholder
+                    self.steam_api_cache[sid3]['playtime'] = None
 
             self.api_executor.submit(self._worker_single_playtime, api_key, s64, sid3)
 
