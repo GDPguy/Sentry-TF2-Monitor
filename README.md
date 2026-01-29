@@ -33,7 +33,7 @@ Most users should **download the latest precompiled release**.
 2. Extract to a folder
 - On Linux, you may need to run `chmod +x Sentry` in the terminal.
 
-When running the executable, /cfg/ and /tf2bd/ folders are created automatically.
+When running the executable, /cfg/ and /tf2bd_lists/ folders are created automatically.
 
 If the precompiled build doesn’t work on your system, you can run from source instead (see below).
 
@@ -65,8 +65,8 @@ Go to https://steamhistory.net/api and sign in with your steam account, you shou
 ## Player Lists
 Sentry uses player lists originally created for [TF2 Bot Detector](https://github.com/PazerOP/tf2_bot_detector)
 
-Place TF2BD player lists in the ./tf2bd/ folder. 
-- **Importing:** Place TF2BD player lists into the `./tf2bd/` folder.
+Place TF2BD player lists in the ./tf2bd_lists/ folder. 
+- **Importing:** Place TF2BD player lists into the `./tf2bd_lists/` folder.
 - **Exporting:** Use the **User List Manager** to export your userlist into a TF2BD-compatible JSON file to share with others. 
 
 Note: Only Cheater & Suspicious player types will be exported at this time. This software only uses the 'Cheater' and 'Suspicious' attributes from TF2BD lists; exporting players marked 'Other'
