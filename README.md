@@ -23,7 +23,8 @@ Sentry is a cross-platform tool for Team Fortress 2 to monitor in-game players i
   - Edit entries and notes from the GUI.
   - Export your list in TF2BD format from the User List Manager for sharing
 - **Social Graph**
-  - **Player relationships:** If Player A is friends with B, and B is friends with C, they are all identified as a single linked group. In tight-knit community servers, you might see several people indirectly grouped together. This feature is mostly intended for Casual Mode to identify potential party stacks.
+  - See who is friends with who
+  - **Player relationships:** If Player A is friends with B, and B is friends with C, they are all identified as a single linked group. This feature is intended for Casual Mode to identify potential party stacks.
   - **Tooltips:** Hover over the cell in the `#` column to see exactly how a group is connected. It distinguishes between **Direct Friends** (Steam friends) and **Indirectly Linked** players (friends of friends).
 ## Download (Recommended)
 Most users should **download the latest precompiled release**.
