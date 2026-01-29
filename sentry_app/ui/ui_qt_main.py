@@ -248,7 +248,7 @@ class MainWindow(DeselectableWindowMixin, QMainWindow):
 
     def on_delete(self):
         if self.selected_steamid:
-            if self.actions.delete(self.selected_steamid):
+            if self.actions.delete(self.selected_steamid, self.selected_name):
                 self.apply_local_update(self.selected_steamid, ptype=None, note="")
 
     def apply_local_update(self, steamid, ptype="NO_CHANGE", note="NO_CHANGE"):

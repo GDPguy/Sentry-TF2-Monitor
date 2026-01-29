@@ -81,8 +81,8 @@ class ActionHandler:
             return new_note
         return None
 
-    def delete(self, steamid):
-        if custom_popup(self.parent, None, "Confirm", f"Delete entry for {steamid}?", is_confirmation=True):
+    def delete(self, steamid, name):
+        if custom_popup(self.parent, None, "Confirm", f"Delete entry for {name} - {steamid}?", is_confirmation=True):
             self.logic.delete_player(steamid)
             return True
         return False

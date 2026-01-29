@@ -232,7 +232,7 @@ class UserListWindow(BaseAuxWindow):
             self.apply_local_update(self.sel_sid, note=new_note)
 
     def on_delete(self):
-        if self.actions.delete(self.sel_sid):
+        if self.actions.delete(self.sel_sid, self.sel_name):
             self.refresh()
 
     def refresh(self):
@@ -343,7 +343,7 @@ class RecentPlayersWindow(BaseAuxWindow):
 
     def on_delete(self):
         if self.sel_sid:
-            if self.actions.delete(self.sel_sid):
+            if self.actions.delete(self.sel_sid, self.sel_name):
                 self.apply_local_update(self.sel_sid, ptype="CLEAR", note="")
 
     def refresh(self):
