@@ -159,16 +159,18 @@ class BaseAuxWindow(DeselectableWindowMixin, QDialog):
             if not sid_item or sid_item.text() != steamid:
                 continue
 
-            if self.mark_col is not None:
+            if self.mark_col is not None and ptype != "NO_CHANGE":
                 m_item = self.table.item(r, self.mark_col)
                 if mark_text is not None: m_item.setText(mark_text)
                 if mark_tooltip is not None: m_item.setToolTip(mark_tooltip)
+
                 if text_color: m_item.setForeground(text_color)
                 else: m_item.setData(Qt.ForegroundRole, None)
 
-            name_item = self.table.item(r, self.name_col)
-            if bg_color: name_item.setBackground(bg_color)
-            else: name_item.setData(Qt.BackgroundRole, None)
+            if self.name_col is not None and ptype != "NO_CHANGE":
+                name_item = self.table.item(r, self.name_col)
+                if bg_color: name_item.setBackground(bg_color)
+                else: name_item.setData(Qt.BackgroundRole, None)
 
             if note != "NO_CHANGE" and self.notes_col is not None:
                 self.table.item(r, self.notes_col).setText(note)
