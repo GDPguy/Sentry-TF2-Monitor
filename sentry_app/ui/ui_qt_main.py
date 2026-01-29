@@ -146,7 +146,7 @@ class MainWindow(DeselectableWindowMixin, QMainWindow):
         table.verticalHeader().setDefaultSectionSize(self.px(28))
         table.setIconSize(QSize(self.px(24), self.px(24)))
         table.setSortingEnabled(True)
-
+        table.sortByColumn(COL_KILLS, Qt.DescendingOrder)
         header = table.horizontalHeader()
         header.setSectionResizeMode(QHeaderView.Interactive)
         header.setStretchLastSection(True)
