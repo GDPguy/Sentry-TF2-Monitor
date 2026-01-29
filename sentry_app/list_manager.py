@@ -289,6 +289,17 @@ class ListManager:
             if in_user: return "[User]"
         return ""
 
+    def get_mark_tooltip(self, steamid):
+        lines = []
+        with self.lock:
+            if steamid in self.tf2bd_cheaters: lines.append("TF2BD: Cheater")
+            elif steamid in self.tf2bd_suspicious: lines.append("TF2BD: Suspicious")
+
+            if steamid in self.user_cheaters: lines.append("User: Cheater")
+            elif steamid in self.user_suspicious: lines.append("User: Suspicious")
+            elif steamid in self.user_other: lines.append("User: Other")
+        return "\n".join(lines)
+
     def get_user_notes(self, steamid):
         with self.lock:
             return self.user_notes_map.get(steamid, "")

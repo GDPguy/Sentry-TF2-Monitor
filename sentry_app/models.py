@@ -13,3 +13,10 @@ class PlayerInstance:
         self.vac_banned = False
         self.game_bans = 0
         self.tf2_playtime = None
+        self.account_age = None
+        self.stack_id = None
+        self.direct_friends = []
+        self.extended_stack = []
+        self.mark_label = ""
+        self.ban_count = ""
+        self.mark_tooltip = ""

@@ -2,7 +2,7 @@ import threading
 import time
 import requests
 import datetime
-from collections import deque
+from collections import deque, defaultdict
 from .config import ConfigManager
 from .rcon import RConManager
 from .list_manager import ListManager
@@ -55,6 +55,7 @@ class AppLogic:
 
         self.steam_api_lock = threading.Lock()
         self.steam_api_cache = {}
+        self.friend_cache = {}
         self.api_executor = concurrent.futures.ThreadPoolExecutor(max_workers=10)
 
         boundary_roots = ["cheat", "hack", "aimbot", "wallhack"]
@@ -103,6 +104,7 @@ class AppLogic:
         to_query_summary = []
         to_query_bans = []
         to_query_playtime = []
+        to_query_friends = []
 
         with self.steam_api_lock:
             for sid in steamids:
@@ -116,6 +118,10 @@ class AppLogic:
                 if 'playtime' not in entry:
                     to_query_playtime.append(sid)
 
+                f_entry = self.friend_cache.get(sid)
+                if not f_entry:
+                    to_query_friends.append(sid)
+
         def get_map(sids):
             m = {}
             for s in sids:
@@ -127,14 +133,21 @@ class AppLogic:
             threading.Thread(target=self._worker_batch_api,
                              args=(api_key, get_map(to_query_summary), get_map(to_query_bans)),
                              daemon=True).start()
+        sid_map_play = get_map(to_query_playtime[:20])
 
-        sid_map_play = get_map(to_query_playtime[:32])
         for s64, sid3 in sid_map_play.items():
             with self.steam_api_lock:
                 if 'playtime' not in self.steam_api_cache.setdefault(sid3, {}):
                     self.steam_api_cache[sid3]['playtime'] = None
-
             self.api_executor.submit(self._worker_single_playtime, api_key, s64, sid3)
+
+        sid_map_friends = get_map(to_query_friends[:20])
+
+        for s64, sid3 in sid_map_friends.items():
+            with self.steam_api_lock:
+                 self.friend_cache[sid3] = {'friends': set(), 'last_update': now}
+            self.api_executor.submit(self._worker_single_friends, api_key, s64, sid3)
+
 
     def _worker_batch_api(self, key, map_summ, map_bans):
         if map_summ:
@@ -150,6 +163,7 @@ class AppLogic:
                             with self.steam_api_lock:
                                 e = self.steam_api_cache.setdefault(sid3, {})
                                 e['avatar'] = p.get('avatar')
+                                e['timecreated'] = p.get('timecreated', 0)
                                 e['last_update'] = time.monotonic()
             except Exception: pass
 
@@ -168,6 +182,81 @@ class AppLogic:
                                 e['vac'] = b.get('VACBanned', False)
                                 e['game_bans'] = b.get('NumberOfGameBans', 0)
             except Exception: pass
+
+    def _worker_single_friends(self, key, s64, sid3):
+        try:
+            r = requests.get("http://api.steampowered.com/ISteamUser/GetFriendList/v0001/",
+                             params={'key': key, 'steamid': s64, 'relationship': 'friend'}, timeout=5)
+            data = r.json()
+            friends_s64 = []
+            if 'friendslist' in data:
+                friends_s64 = [f['steamid'] for f in data['friendslist']['friends']]
+
+            friends_s3 = set()
+            for fs64 in friends_s64:
+                 try:
+                     conv = f"[U:1:{int(fs64) - 76561197960265728}]"
+                     friends_s3.add(conv)
+                 except: pass
+
+            with self.steam_api_lock:
+                self.friend_cache[sid3] = {'friends': friends_s3, 'last_update': time.monotonic()}
+        except Exception:
+            pass
+
+    def calculate_stacks(self, all_players):
+        p_map = {p.steamid: p for p in all_players}
+        sids = list(p_map.keys())
+
+        # Build adjacency list
+        adj = defaultdict(set)
+
+        with self.steam_api_lock:
+            for sid in sids:
+                f_data = self.friend_cache.get(sid)
+                if f_data:
+                    my_friends = f_data['friends']
+                    online_friends = my_friends.intersection(sids)
+                    for friend_sid in online_friends:
+                        adj[sid].add(friend_sid)
+                        adj[friend_sid].add(sid)
+
+        # BFS to assign stack ids
+        visited = set()
+        stack_id_counter = 1
+
+        for sid in sids:
+            if sid not in visited and sid in adj:
+                stack_group = set()
+                queue = [sid]
+                visited.add(sid)
+
+                while queue:
+                    curr = queue.pop(0)
+                    stack_group.add(curr)
+                    for neighbor in adj[curr]:
+                        if neighbor not in visited:
+                            visited.add(neighbor)
+                            queue.append(neighbor)
+
+                if len(stack_group) > 1:
+                    names_in_stack = [p_map[s].name for s in stack_group]
+                    for s in stack_group:
+                        p_map[s].stack_id = stack_id_counter
+
+                        # Calculate direct friends
+                        direct_friend_names = []
+                        if s in adj:
+                            for neighbor_sid in adj[s]:
+                                if neighbor_sid in p_map:
+                                    direct_friend_names.append(p_map[neighbor_sid].name)
+                        p_map[s].direct_friends = direct_friend_names
+
+                        # Remove self and direct friends from the total list for the rest
+                        extended_names = [n for n in names_in_stack if n != p_map[s].name and n not in direct_friend_names]
+                        p_map[s].extended_stack = extended_names
+
+                    stack_id_counter += 1
 
     def _worker_single_playtime(self, key, s64, sid3):
         try:
@@ -253,12 +342,27 @@ class AppLogic:
             p.notes = self.lists.get_user_notes(p.steamid)
             p.mark_label = self.lists.get_mark_label(p.steamid)
             p.ban_count = self.get_sourcebans_count(p.steamid)
+            p.mark_tooltip = self.lists.get_mark_tooltip(p.steamid)
 
-            api_data = self.steam_api_cache.get(p.steamid, {})
-            p.avatar_url = api_data.get('avatar')
-            p.vac_banned = api_data.get('vac', False)
-            p.game_bans = api_data.get('game_bans', 0)
-            p.tf2_playtime = api_data.get('playtime')
+        self.calculate_stacks(all_players)
+        now_ts = int(time.time())
+
+        with self.steam_api_lock:
+            for p in all_players:
+                data = self.steam_api_cache.get(p.steamid, {})
+
+                p.avatar_url = data.get('avatar')
+                p.vac_banned = data.get('vac', False)
+                p.game_bans = data.get('game_bans', 0)
+                p.tf2_playtime = data.get('playtime')
+
+                created = data.get('timecreated', 0)
+                if created > 0:
+                    years = (now_ts - created) / 31536000
+                    p.account_age = round(years, 1)
+                else:
+                    p.account_age = None
+
 
         with self.state_lock:
             self.user_current_team = local_team
@@ -366,7 +470,7 @@ class AppLogic:
     def stop_automation_thread(self):
         self._automation_stop.set()
 
-    def kick_player(self, steamid):
+    def kick_player(self, steamid, reason=""):
         target_uid = None
         with self.state_lock:
             all_p = self.connected_red_players + self.connected_blue_players + self.connected_spectator_players + self.connected_unassigned_players
@@ -380,7 +484,12 @@ class AppLogic:
                 if not self._kick_lock.acquire(blocking=False):
                     return
                 try:
-                    self.rcon.execute(f"callvote kick {target_uid}")
+                    arg = str(target_uid)
+                    if reason:
+                        arg += f" {reason}"
+                    cmd = f'callvote kick "{arg}"'
+
+                    self.rcon.execute(cmd)
                 finally:
                     self._kick_lock.release()
 
@@ -423,7 +532,7 @@ class AppLogic:
         kicked = False
         for p in target_list:
             if self.lists.identify_player_type(p.steamid) == "Cheater":
-                self.rcon.execute(f"callvote kick {p.userid}")
+                self.kick_player(p.steamid, "cheating")
                 print(f"attempting to call a votekick on {p.name}")
                 kicked = True
                 break

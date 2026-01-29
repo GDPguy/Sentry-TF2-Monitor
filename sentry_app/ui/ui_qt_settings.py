@@ -164,6 +164,10 @@ class SettingsWindow(QDialog):
         hb_save.addStretch()
         lay_app.addRow("User List:", hb_save)
 
+        self.vars['Show_SteamID_Column'] = QCheckBox("Show SteamID Column in Main Window (Restart Required)")
+        self.vars['Show_SteamID_Column'].setChecked(self.logic.get_setting_bool('Show_SteamID_Column'))
+        lay_app.addRow("Interface:", self.vars['Show_SteamID_Column'])
+
         self.vars['UI_Scale'] = QDoubleSpinBox()
         self.vars['UI_Scale'].setRange(0.85, 2.0)
         self.vars['UI_Scale'].setSingleStep(0.05)

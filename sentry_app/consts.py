@@ -1,4 +1,4 @@
-APP_VERSION = "1.0.0"
+APP_VERSION = "1.1.0"
 
 DEFAULT_SETTINGS = {
     'User': '[U:1:XXXXXXXXXX]',
@@ -18,8 +18,9 @@ DEFAULT_SETTINGS = {
     'UI_Scale': '1.0',
     'Color_Self': '#44cc44',       # Green
     'Color_Cheater': '#ff4444',    # Red
-    'Color_Suspicious': '#ffcc00', # Yellow
+    'Color_Suspicious': '#e6b800', # Yellow
     'Color_Other': '#888888',      # Gray
     'Save_Player_Names': 'True',
-    'Save_Player_Timestamps': 'True'
+    'Save_Player_Timestamps': 'True',
+    'Show_SteamID_Column': 'False'
 }

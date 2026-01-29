@@ -121,6 +121,7 @@ class TF2Monitor:
             except ValueError:
                 pass
         else:
+            print("Parsing G15 failed: local team missing")
             return False, [], [], [], [], None
 
         # Completeness check
@@ -136,12 +137,14 @@ class TF2Monitor:
             set(userid_data.keys()) == expected_indices and
             set(account_data.keys()) == expected_indices
         ):
+            print("Parsing G15 failed: indices mismatch")
             return False, [], [], [], [], None
 
         # Strict name validation
         for idx_str in expected_indices:
             if connected_data[idx_str] == 'true':
                 if not name_data[idx_str]:
+                    print("Parsing G15 failed: idx_str not in indices")
                     return False, [], [], [], [], None
 
         parsed_red = []

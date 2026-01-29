@@ -87,8 +87,8 @@ class ActionHandler:
             return True
         return False
 
-    def kick(self, steamid):
-        self.logic.kick_player(steamid)
+    def kick(self, steamid, reason=""):
+        self.logic.kick_player(steamid, reason)
 
     def open_profile(self, steamid):
         s64 = convert_steamid3_to_steamid64(steamid)

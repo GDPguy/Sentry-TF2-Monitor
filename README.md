@@ -10,23 +10,27 @@ Sentry is a cross-platform tool for Team Fortress 2 to monitor in-game players i
 ## Features
 - **Cheater detection / tagging**
   - Uses TF2 Bot Detector player lists and your own user list.
-  - Mark players as **Cheater / Suspicious / Other**.
+  - Mark players as **Cheater / Suspicious / Other** by right-clicking.
+  - Attach notes to a player by double-clicking the 'notes' section of a player to quick edit, or use the context menu
 - **Automation (off by default)**
   - Announce connected cheaters to global chat
   - Automatically callvote-kick detected cheaters
   - Party chat announcements:
     - Notifies party chat when new cheaters are detected/present in a server
     - Notifies party chat when players with suspicious SourceBans are detected (keyword matches (e.g. "aimbot")
+      - Players with suspicious SourceBans are indicated in the GUI with bold red text. Double-click or use the context menu to view them
 - **User list management**
   - Edit entries and notes from the GUI.
   - Export your list in TF2BD format from the User List Manager for sharing
-
+- **Social Graph & Linked Groups**
+  - **Player relationships:** Sentry uses transitive logic to group players. If Player A is friends with B, and B is friends with C, they are all identified as a single linked group. In tight-knit community servers, you might see several people indirectly grouped together. This feature is mostly intended for Casual Mode to identify potential party stacks.
+  - **Tooltips:** Hover over the cell in the `#` column to see exactly how a group is connected. It distinguishes between **Direct Friends** (Steam friends) and **Indirectly Linked** players (friends of friends).
 ## Download (Recommended)
 Most users should **download the latest precompiled release**.
 
 1. Go to [releases](https://github.com/GDPguy/Sentry-TF2/releases) and download the latest build for your OS.
 2. Extract to a folder
-(On Linux, in the terminal you might need to `chmod +x Sentry`)
+- On Linux, you may need to run `chmod +x Sentry` in the terminal.
 
 When running the executable, /cfg/ and /tf2bd/ folders are created automatically.
 
@@ -52,15 +56,17 @@ Settings are saved to:
 - `cfg/settings.ini`
 Get a Steam Web API key (optional, **Recommended**):
 Go to https://steamcommunity.com/dev/apikey log in and set the domain name to whatever, like localhost. Click register, then copy your api key into settings.
+- Required for **Social Graph/Friend detection** and fetching avatars/account age/playtime
 Get a SteamHistory API key (optional, **Recommended**):
 Go to https://steamhistory.net/api and sign in with your steam account, you should be able to get one from there.
+- Required for **SourceBans** integration.
 
 ## Player Lists
 Sentry uses player lists originally created for [TF2 Bot Detector](https://github.com/PazerOP/tf2_bot_detector)
 
 Place TF2BD player lists in the ./tf2bd/ folder. 
-
-If you want to share your lists for others to use, export your list in TF2BD format from the User List Manager for sharing. Then this list can be used by others using this software and TF2BD.
+- **Importing:** Place TF2BD player lists into the `./tf2bd_lists/` folder.
+- **Exporting:** Use the **User List Manager** to export your userlist into a TF2BD-compatible JSON file to share with others. 
 
 Note: Only Cheater & Suspicious player types will be exported at this time. This software only uses the 'Cheater' and 'Suspicious' attributes from TF2BD lists; exporting players marked 'Other'
 does not cleanly match those attributes. 
