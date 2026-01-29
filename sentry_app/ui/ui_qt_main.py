@@ -545,21 +545,20 @@ class MainWindow(DeselectableWindowMixin, QMainWindow):
 
             is_suspicious_bans = (p.steamid in sus_bans_set)
 
-            if is_suspicious_bans or sb_sort > 0:
-                f = sb_item.font()
+            f = sb_item.font()
+            if is_suspicious_bans:
                 f.setBold(True)
-                sb_item.setFont(f)
-
-                if is_suspicious_bans:
-                    sb_item.setForeground(QColor("#ff4444"))
-                    sb_item.setToolTip("Suspicious keywords found in ban history")
-                else:
-                    sb_item.setData(Qt.ForegroundRole, None)
-                    sb_item.setToolTip(f"{sb_sort} SourceBans found")
-            else:
+                sb_item.setForeground(QColor("#ff4444"))
+                sb_item.setToolTip("Suspicious keywords found in ban history")
+            elif sb_sort > 0:
+                f.setBold(False)
                 sb_item.setData(Qt.ForegroundRole, None)
-                f = sb_item.font(); f.setBold(False); sb_item.setFont(f)
+                sb_item.setToolTip(f"{sb_sort} SourceBans found")
+            else:
+                f.setBold(False)
+                sb_item.setData(Qt.ForegroundRole, None)
                 sb_item.setToolTip("")
+            sb_item.setFont(f)
 
             mark_item = update_cell(row, COL_MARK, p.mark_label, bg=None, tooltip=p.mark_tooltip)
             if status_fg:
