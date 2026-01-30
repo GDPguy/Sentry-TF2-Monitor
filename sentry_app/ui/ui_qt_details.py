@@ -144,7 +144,7 @@ class PlayerDetailsWindow(QDialog):
             marked_tooltip = (
                 f"Userlist - Cheater: {self.player.marked_cheater_friends_user}, "
                 f"Suspicious: {self.player.marked_suspicious_friends_user}\n"
-                f"TF2BD   - Cheater: {self.player.marked_cheater_friends_tf2bd}, "
+                f"TF2BD - Cheater: {self.player.marked_cheater_friends_tf2bd}, "
                 f"Suspicious: {self.player.marked_suspicious_friends_tf2bd}"
             )
 
