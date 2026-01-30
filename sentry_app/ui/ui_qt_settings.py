@@ -14,8 +14,16 @@ class SettingsWindow(QDialog):
         self.px = px_func
         self.setWindowTitle("Settings")
 
-        self.resize(self.px(720), self.px(800))
+        self.resize(self.px(720), self.px(850))
         self.setWindowFlags(self.windowFlags() & ~Qt.WindowContextHelpButtonHint)
+
+        checkbox_dim = self.px(18)
+        font_size = self.px(10)
+        self.checkbox_style = f"""
+            QCheckBox::indicator {{ width: {checkbox_dim}px; height: {checkbox_dim}px; }}
+            QCheckBox {{ font-size: {font_size}pt; }}
+        """
+        self.setStyleSheet(self.checkbox_style)
 
         main_layout = QVBoxLayout(self)
         scroll = QScrollArea()
@@ -99,10 +107,6 @@ class SettingsWindow(QDialog):
 
         lay_ext.addRow("SteamHistory API Key:", hb_api)
 
-        self.vars['Enable_Sourcebans_Lookup'] = QCheckBox("Enable SteamHistory SourceBans Lookup")
-        self.vars['Enable_Sourcebans_Lookup'].setChecked(self.logic.get_setting_bool("Enable_Sourcebans_Lookup"))
-        lay_ext.addRow(self.vars['Enable_Sourcebans_Lookup'])
-
         self.vars['Auto_Update_TF2BD_Lists'] = QCheckBox("Auto-update TF2BD lists on startup")
         self.vars['Auto_Update_TF2BD_Lists'].setChecked(self.logic.get_setting_bool("Auto_Update_TF2BD_Lists"))
         lay_ext.addRow(self.vars['Auto_Update_TF2BD_Lists'])
@@ -116,14 +120,7 @@ class SettingsWindow(QDialog):
         self.vars['Kick_Cheaters'].setChecked(self.logic.get_setting_bool('Kick_Cheaters'))
         lay_auto.addWidget(self.vars['Kick_Cheaters'], 0, 0)
 
-        lbl_kick = QLabel("Interval (s):")
-        lbl_kick.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        lay_auto.addWidget(lbl_kick, 0, 1)
-
-        self.vars['Kick_Cheaters_Interval'] = QSpinBox()
-        self.vars['Kick_Cheaters_Interval'].setRange(5, 60)
-        self.vars['Kick_Cheaters_Interval'].setValue(self.logic.get_setting_int('Kick_Cheaters_Interval'))
-        lay_auto.addWidget(self.vars['Kick_Cheaters_Interval'], 0, 2)
+        lbl_kick = QLabel("Attempts at most once every 170 seconds")
 
         self.vars['Announce_Cheaters'] = QCheckBox("Global Chat Announce")
         self.vars['Announce_Cheaters'].setChecked(self.logic.get_setting_bool('Announce_Cheaters'))
@@ -164,9 +161,30 @@ class SettingsWindow(QDialog):
         hb_save.addStretch()
         lay_app.addRow("User List:", hb_save)
 
-        self.vars['Show_SteamID_Column'] = QCheckBox("Show SteamID Column in Main Window (Restart Required)")
-        self.vars['Show_SteamID_Column'].setChecked(self.logic.get_setting_bool('Show_SteamID_Column'))
-        lay_app.addRow("Interface:", self.vars['Show_SteamID_Column'])
+        lbl_cols = QLabel("Visible Columns (Main Window, Restart Required):")
+        lay_app.addRow(lbl_cols)
+
+        col_grid = QGridLayout()
+
+        def add_col_cb(text, key, row, col):
+            cb = QCheckBox(text)
+            cb.setChecked(self.logic.get_setting_bool(key))
+            self.vars[key] = cb
+            col_grid.addWidget(cb, row, col)
+
+        add_col_cb("Ping", 'Show_Ping_Column', 0, 0)
+        add_col_cb("Kills", 'Show_Kills_Column', 0, 1)
+        add_col_cb("Deaths", 'Show_Deaths_Column', 0, 2)
+        add_col_cb("SteamID", 'Show_SteamID_Column', 0, 3)
+
+        add_col_cb("Account Age", 'Show_Age_Column', 1, 0)
+        add_col_cb("TF2 Hours", 'Show_Hours_Column', 1, 1)
+        add_col_cb("VAC Bans", 'Show_VAC_Column', 1, 2)
+        add_col_cb("Game Bans", 'Show_GameBans_Column', 1, 3)
+
+        add_col_cb("SourceBans", 'Show_SB_Column', 2, 0)
+
+        lay_app.addRow(col_grid)
 
         self.vars['UI_Scale'] = QDoubleSpinBox()
         self.vars['UI_Scale'].setRange(0.85, 2.0)

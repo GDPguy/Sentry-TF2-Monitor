@@ -7,8 +7,9 @@ from PySide6.QtWidgets import (
     QFileDialog, QAbstractItemView, QApplication,
     QLineEdit, QLabel
 )
-from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QAction, QColor, QCursor
+from PySide6.QtCore import Qt, QTimer, QUrl, QSize
+from PySide6.QtGui import QAction, QColor, QCursor, QPixmap, QIcon
+from PySide6.QtNetwork import QNetworkAccessManager, QNetworkRequest, QNetworkReply
 
 from .ui_qt_dialogs import custom_popup
 from .ui_qt_shared import (
@@ -110,13 +111,25 @@ class BaseAuxWindow(DeselectableWindowMixin, QDialog):
             self.show_context_menu(QCursor.pos())
 
     def on_double_click(self, row, col):
-        if self.notes_col is not None and col == self.notes_col:
-            sid_item = self.table.item(row, self.steamid_col)
-            name_item = self.table.item(row, self.name_col)
-            if sid_item:
-                self.sel_sid = sid_item.text()
-                self.sel_name = name_item.text() if name_item else "Unknown"
-                self.on_edit_notes()
+        sid_item = self.table.item(row, self.steamid_col)
+        if not sid_item: return
+        steamid = sid_item.text()
+
+        self.open_details(steamid)
+
+    def open_details(self, steamid):
+        player_obj = self.logic.get_player_by_steamid(steamid)
+        if not player_obj:
+            from ..models import PlayerInstance
+
+            notes = self.logic.lists.get_user_notes(steamid)
+            ptype = self.logic.lists.identify_player_type(steamid)
+            name = self.sel_name or "Unknown"
+            player_obj = PlayerInstance(0, name, 0, steamid, 0, 0, ptype, notes)
+
+        if player_obj:
+            from .ui_qt_details import PlayerDetailsWindow
+            PlayerDetailsWindow(self, self.logic, player_obj, self.px).exec()
 
     def show_context_menu(self, global_pos):
         pass
@@ -126,56 +139,7 @@ class BaseAuxWindow(DeselectableWindowMixin, QDialog):
 
     def apply_local_update(self, steamid, ptype="NO_CHANGE", note="NO_CHANGE"):
         self.register_edit(steamid)
-
-        bg_color = None
-        text_color = None
-        mark_text = None
-        mark_tooltip = None
-
-        if ptype == "CLEAR":
-            mark_text = ""
-            mark_tooltip = None
-            bg_color = None
-            text_color = None
-        elif ptype != "NO_CHANGE":
-            if ptype == "Cheater":
-                bg_color = QColor(self.logic.get_setting_color('Color_Cheater'))
-                text_color = bg_color
-            elif ptype == "Suspicious":
-                bg_color = QColor(self.logic.get_setting_color('Color_Suspicious'))
-                text_color = bg_color
-            elif ptype == "Other":
-                bg_color = QColor(self.logic.get_setting_color('Color_Other'))
-                text_color = bg_color
-
-            mark_text = self.logic.lists.get_mark_label(steamid)
-            mark_tooltip = self.logic.lists.get_mark_tooltip(steamid)
-
-        is_sorting = self.table.isSortingEnabled()
-        self.table.setSortingEnabled(False)
-
-        for r in range(self.table.rowCount()):
-            sid_item = self.table.item(r, self.steamid_col)
-            if not sid_item or sid_item.text() != steamid:
-                continue
-
-            if self.mark_col is not None and ptype != "NO_CHANGE":
-                m_item = self.table.item(r, self.mark_col)
-                if mark_text is not None: m_item.setText(mark_text)
-                if mark_tooltip is not None: m_item.setToolTip(mark_tooltip)
-
-                if text_color: m_item.setForeground(text_color)
-                else: m_item.setData(Qt.ForegroundRole, None)
-
-            if self.name_col is not None and ptype != "NO_CHANGE":
-                name_item = self.table.item(r, self.name_col)
-                if bg_color: name_item.setBackground(bg_color)
-                else: name_item.setData(Qt.BackgroundRole, None)
-
-            if note != "NO_CHANGE" and self.notes_col is not None:
-                self.table.item(r, self.notes_col).setText(note)
-
-        self.table.setSortingEnabled(is_sorting)
+        pass
 
 class UserListWindow(BaseAuxWindow):
     def __init__(self, parent, logic, px_func):
@@ -208,13 +172,18 @@ class UserListWindow(BaseAuxWindow):
 
         self.refresh()
 
+    def on_double_click(self, row, col):
+        sid_item = self.table.item(row, self.steamid_col)
+        name_item = self.table.item(row, self.name_col)
+        if not sid_item: return
+        self.sel_sid = sid_item.text()
+        self.sel_name = name_item.text() if name_item else "Unknown"
+
+        self.on_edit_entry()
+
     def show_context_menu(self, global_pos):
         menu = QMenu(self)
-        mark_menu = menu.addMenu("Mark Player As...")
-        mark_menu.addAction("Cheater", lambda: self.on_mark("Cheater"))
-        mark_menu.addAction("Suspicious", lambda: self.on_mark("Suspicious"))
-        mark_menu.addAction("Other", lambda: self.on_mark("Other"))
-        menu.addAction("Edit Notes", self.on_edit_notes)
+        menu.addAction("Edit User Entry", self.on_edit_entry)
         menu.addAction("Delete Entry", self.on_delete)
         menu.addSeparator()
         menu.addAction("View TF2BD Info", lambda: self.actions.view_tf2bd(self.sel_sid))
@@ -223,19 +192,54 @@ class UserListWindow(BaseAuxWindow):
         menu.addAction("Open SteamHistory Profile", lambda: self.actions.open_sh(self.sel_sid))
         menu.exec(global_pos)
 
-    def on_mark(self, ptype):
-        if self.sel_sid:
-            new_type = self.actions.mark(self.sel_sid, self.sel_name, ptype)
-            self.apply_local_update(self.sel_sid, ptype=new_type)
-
-    def on_edit_notes(self):
-        new_note = self.actions.edit_notes(self.sel_sid, self.sel_name)
-        if new_note is not None:
-            self.apply_local_update(self.sel_sid, note=new_note)
+    def on_edit_entry(self):
+        self.actions.edit_entry(self.sel_sid, self.sel_name)
+        ptype = self.logic.lists.identify_player_type(self.sel_sid)
+        note = self.logic.lists.get_user_notes(self.sel_sid)
+        self.apply_local_update(self.sel_sid, ptype=ptype, note=note)
 
     def on_delete(self):
-        if self.actions.delete(self.sel_sid, self.sel_name):
-            self.refresh()
+        if self.sel_sid:
+            self.actions.delete(self.sel_sid, self.sel_name)
+        self.refresh()
+
+    def apply_local_update(self, steamid, ptype="NO_CHANGE", note="NO_CHANGE"):
+        self.register_edit(steamid)
+
+        c_cheat = QColor(self.logic.get_setting_color('Color_Cheater'))
+        c_sus = QColor(self.logic.get_setting_color('Color_Suspicious'))
+        c_oth = QColor(self.logic.get_setting_color('Color_Other'))
+
+        bg_color = None
+        text_color = None
+
+        if ptype == "CLEAR":
+            bg_color = None
+            text_color = None
+        elif ptype != "NO_CHANGE":
+            if ptype == "Cheater": bg_color = c_cheat
+            elif ptype == "Suspicious": bg_color = c_sus
+            elif ptype == "Other": bg_color = c_oth
+
+        is_sorting = self.table.isSortingEnabled()
+        self.table.setSortingEnabled(False)
+
+        for r in range(self.table.rowCount()):
+            sid_item = self.table.item(r, self.steamid_col)
+            if not sid_item or sid_item.text() != steamid:
+                continue
+
+            if ptype != "NO_CHANGE":
+                type_item = self.table.item(r, self.mark_col)
+                type_item.setText(ptype if ptype != "CLEAR" else "")
+
+                if bg_color: type_item.setBackground(bg_color)
+                else: type_item.setData(Qt.BackgroundRole, None)
+
+            if note != "NO_CHANGE":
+                self.table.item(r, self.notes_col).setText(note)
+
+        self.table.setSortingEnabled(is_sorting)
 
     def refresh(self):
         self.table.setSortingEnabled(False)
@@ -264,8 +268,8 @@ class UserListWindow(BaseAuxWindow):
                 str(e.get('notes', ''))
             ]
 
-            bg_color = None
             ptype = e.get('player_type')
+            bg_color = None
             if ptype == 'Cheater': bg_color = c_cheat
             elif ptype == 'Suspicious': bg_color = c_sus
             elif ptype == 'Other': bg_color = c_oth
@@ -273,7 +277,7 @@ class UserListWindow(BaseAuxWindow):
             for col, val in enumerate(items):
                 item = QTableWidgetItem(val)
                 item.setTextAlignment(Qt.AlignCenter)
-                if col == UL_COL_NAME and bg_color:
+                if col == UL_COL_TYPE and bg_color:
                      item.setBackground(bg_color)
                 self.table.setItem(row, col, item)
 
@@ -286,7 +290,6 @@ class UserListWindow(BaseAuxWindow):
             ok, msg = self.logic.lists.export_to_tf2bd(fn)
             custom_popup(self, None, "Export Result", msg)
 
-
 class RecentPlayersWindow(BaseAuxWindow):
     def __init__(self, parent, logic, px_func):
         super().__init__(
@@ -297,10 +300,14 @@ class RecentPlayersWindow(BaseAuxWindow):
             notes_col=RP_COL_NOTES
         )
 
+        self.nam = QNetworkAccessManager(self)
+        self.icon_cache = {}
+
         self.setup_columns(["Name", "SteamID", "Mark", "Notes"])
         self.table.setColumnWidth(RP_COL_NAME, self.px(180))
         self.table.setColumnWidth(RP_COL_STEAMID, self.px(130))
         self.table.setColumnWidth(RP_COL_MARK, self.px(80))
+        self.table.setIconSize(QSize(self.px(24), self.px(24)))
 
         btn_layout = QHBoxLayout()
         btn_layout.addStretch()
@@ -318,13 +325,18 @@ class RecentPlayersWindow(BaseAuxWindow):
         if self.timer.isActive(): self.timer.stop()
         super().closeEvent(event)
 
+    def on_double_click(self, row, col):
+        sid_item = self.table.item(row, self.steamid_col)
+        if sid_item:
+            self.open_details(sid_item.text())
+
     def show_context_menu(self, global_pos):
         menu = QMenu(self)
         mark_menu = menu.addMenu("Mark Player As...")
         mark_menu.addAction("Cheater", lambda: self.on_mark("Cheater"))
         mark_menu.addAction("Suspicious", lambda: self.on_mark("Suspicious"))
         mark_menu.addAction("Other", lambda: self.on_mark("Other"))
-        menu.addAction("Edit Notes", self.on_edit_notes)
+        menu.addAction("Edit User Entry", self.on_edit_entry)
         menu.addAction("Delete User Entry", self.on_delete)
         menu.addSeparator()
         menu.addAction("View TF2BD Info", lambda: self.actions.view_tf2bd(self.sel_sid))
@@ -338,15 +350,100 @@ class RecentPlayersWindow(BaseAuxWindow):
             self.logic.mark_recently_played(self.sel_sid, ptype, self.logic.recently_played)
             self.apply_local_update(self.sel_sid, ptype=ptype)
 
-    def on_edit_notes(self):
-        new_note = self.actions.edit_notes(self.sel_sid, self.sel_name)
-        if new_note is not None:
-             self.apply_local_update(self.sel_sid, note=new_note)
+    def on_edit_entry(self):
+        self.actions.edit_entry(self.sel_sid, self.sel_name)
+        ptype = self.logic.lists.identify_player_type(self.sel_sid)
+        note = self.logic.lists.get_user_notes(self.sel_sid)
+        self.apply_local_update(self.sel_sid, ptype=ptype, note=note)
 
     def on_delete(self):
         if self.sel_sid:
             if self.actions.delete(self.sel_sid, self.sel_name):
                 self.apply_local_update(self.sel_sid, ptype="CLEAR", note="")
+
+    def set_avatar(self, item, url):
+        if not url: return
+
+        if url in self.icon_cache:
+            item.setIcon(self.icon_cache[url])
+            return
+
+        req = QNetworkRequest(QUrl(url))
+        reply = self.nam.get(req)
+
+        def handle_load():
+            if reply.error() == QNetworkReply.NoError:
+                data = reply.readAll()
+                pix = QPixmap()
+                if pix.loadFromData(data):
+                    icon = QIcon(pix)
+                    self.icon_cache[url] = icon
+                    if item.tableWidget() is not None:
+                        try:
+                            item.setIcon(icon)
+                        except RuntimeError:
+                            pass
+            reply.deleteLater()
+        reply.finished.connect(handle_load)
+
+    def apply_local_update(self, steamid, ptype="NO_CHANGE", note="NO_CHANGE"):
+        self.register_edit(steamid)
+
+        c_cheat = QColor(self.logic.get_setting_color('Color_Cheater'))
+        c_sus = QColor(self.logic.get_setting_color('Color_Suspicious'))
+        c_oth = QColor(self.logic.get_setting_color('Color_Other'))
+
+        bg_color = None
+        text_color = None
+        mark_text = None
+        mark_tooltip = None
+
+        if ptype == "CLEAR":
+            mark_text = ""
+            mark_tooltip = None
+            bg_color = None
+            text_color = None
+        elif ptype != "NO_CHANGE":
+            if ptype == "Cheater":
+                bg_color = c_cheat
+                text_color = c_cheat
+            elif ptype == "Suspicious":
+                bg_color = c_sus
+                text_color = c_sus
+            elif ptype == "Other":
+                bg_color = c_oth
+                text_color = c_oth
+
+            mark_text = self.logic.lists.get_mark_label(steamid)
+            mark_tooltip = self.logic.lists.get_mark_tooltip(steamid)
+
+        was_sorting = self.table.isSortingEnabled()
+        self.table.setSortingEnabled(False)
+
+        for r in range(self.table.rowCount()):
+            sid_item = self.table.item(r, self.steamid_col)
+            if sid_item and sid_item.text() == steamid:
+                if mark_text is not None and self.mark_col is not None:
+                     m_item = self.table.item(r, self.mark_col)
+                     m_item.setText(mark_text)
+                     if mark_tooltip: m_item.setToolTip(mark_tooltip)
+                     if text_color: m_item.setForeground(text_color)
+                     else: m_item.setData(Qt.ForegroundRole, None)
+
+                     if mark_text:
+                         f = m_item.font()
+                         f.setBold(True)
+                         m_item.setFont(f)
+
+                if bg_color is not None and self.name_col is not None:
+                     n_item = self.table.item(r, self.name_col)
+                     if ptype == "CLEAR": n_item.setData(Qt.BackgroundRole, None)
+                     else: n_item.setBackground(bg_color)
+
+                if note != "NO_CHANGE" and self.notes_col is not None:
+                     self.table.item(r, self.notes_col).setText(note)
+
+        self.table.setSortingEnabled(was_sorting)
 
     def refresh(self):
         was_sorting = self.table.isSortingEnabled()
@@ -409,6 +506,11 @@ class RecentPlayersWindow(BaseAuxWindow):
                     if not is_pending:
                         if item.text() != val: item.setText(val)
                         if col == self.mark_col: item.setToolTip(tooltip)
+                        if col == self.mark_col:
+                            f = item.font()
+                            if val: f.setBold(True)
+                            else: f.setBold(False)
+                            item.setFont(f)
 
                     if col == self.name_col:
                         cur_bg = item.background().color()
@@ -416,6 +518,9 @@ class RecentPlayersWindow(BaseAuxWindow):
                             if cur_bg != bg_color: item.setBackground(bg_color)
                         else:
                             if cur_bg.isValid() and cur_bg.alpha() > 0: item.setData(Qt.BackgroundRole, None)
+
+                        if p.avatar_url: self.set_avatar(item, p.avatar_url)
+
                     elif col == self.mark_col:
                         if text_color: item.setForeground(text_color)
                         else: item.setData(Qt.ForegroundRole, None)
@@ -427,10 +532,17 @@ class RecentPlayersWindow(BaseAuxWindow):
                 for col, val in items.items():
                     item = QTableWidgetItem(val)
                     item.setTextAlignment(Qt.AlignCenter)
-                    if col == self.name_col and bg_color: item.setBackground(bg_color)
+                    if col == self.name_col:
+                        if bg_color: item.setBackground(bg_color)
+                        if p.avatar_url: self.set_avatar(item, p.avatar_url)
                     if col == self.mark_col:
                         item.setToolTip(tooltip)
                         if text_color: item.setForeground(text_color)
+                        if val:
+                             f = item.font()
+                             f.setBold(True)
+                             item.setFont(f)
+
                     self.table.setItem(row, col, item)
 
         for r in range(self.table.rowCount() - 1, -1, -1):

@@ -1,5 +1,6 @@
 from PySide6.QtWidgets import (QDialog, QVBoxLayout, QLabel, QPushButton,
-                               QHBoxLayout, QLineEdit, QTextEdit)
+                               QHBoxLayout, QLineEdit, QTextEdit, QRadioButton,
+                               QButtonGroup, QGroupBox)
 from PySide6.QtCore import Qt
 
 class CustomPopup(QDialog):
@@ -90,23 +91,71 @@ def custom_askstring(parent, px_func, title, prompt, initialvalue=""):
         return dlg.input_text
     return None
 
-class CustomNoteDialog(QDialog):
-    def __init__(self, parent, title, prompt, initial_value=""):
+class EditUserDialog(QDialog):
+    def __init__(self, parent, title, name, steamid, current_notes, current_type, logic):
         super().__init__(parent)
         self.setWindowTitle(title)
         self.setModal(True)
         self.setWindowFlags(self.windowFlags() & ~Qt.WindowContextHelpButtonHint)
-        self.input_text = None
+
+        self.result_notes = None
+        self.result_type = None
+
+        self.logic = logic
+        self.steamid = steamid
+        self.was_deleted = False
 
         layout = QVBoxLayout(self)
-        layout.addWidget(QLabel(prompt))
+        layout.setSpacing(10)
 
+        lbl_name = QLabel(f"Player: {name}")
+        lbl_name.setStyleSheet("font-weight: bold")
+        layout.addWidget(lbl_name)
+
+        lbl_id = QLabel(f"SteamID: {steamid}")
+        layout.addWidget(lbl_id)
+
+        layout.addWidget(QLabel("Player Type:"))
+        hbox = QHBoxLayout()
+        self.bg = QButtonGroup(self)
+
+        col_cheat = logic.get_setting_color('Color_Cheater')
+        col_sus = logic.get_setting_color('Color_Suspicious')
+        col_other = logic.get_setting_color('Color_Other')
+
+        self.rb_cheat = QRadioButton("Cheater")
+        self.rb_cheat.setStyleSheet(f"color: {col_cheat}; font-weight: bold;")
+        self.bg.addButton(self.rb_cheat)
+        hbox.addWidget(self.rb_cheat)
+
+        self.rb_sus = QRadioButton("Suspicious")
+        self.rb_sus.setStyleSheet(f"color: {col_sus}; font-weight: bold;")
+        self.bg.addButton(self.rb_sus)
+        hbox.addWidget(self.rb_sus)
+
+        self.rb_other = QRadioButton("Other")
+        self.rb_other.setStyleSheet(f"color: {col_other};")
+        self.bg.addButton(self.rb_other)
+        hbox.addWidget(self.rb_other)
+
+        layout.addLayout(hbox)
+
+        if current_type == "Cheater": self.rb_cheat.setChecked(True)
+        elif current_type == "Suspicious": self.rb_sus.setChecked(True)
+        else: self.rb_other.setChecked(True)
+
+        layout.addWidget(QLabel("Notes:"))
         self.text_area = QTextEdit()
-        self.text_area.setPlainText(initial_value)
+        self.text_area.setPlainText(current_notes)
         self.text_area.setAcceptRichText(False)
         layout.addWidget(self.text_area)
 
         btn_layout = QHBoxLayout()
+
+        btn_delete = QPushButton("Delete Entry")
+        btn_delete.clicked.connect(self.on_delete)
+        btn_layout.addWidget(btn_delete)
+
         btn_layout.addStretch()
 
         btn_cancel = QPushButton("Cancel")
@@ -119,14 +168,26 @@ class CustomNoteDialog(QDialog):
         btn_layout.addWidget(btn_ok)
 
         layout.addLayout(btn_layout)
-        self.resize(400, 300)
+        self.resize(450, 450)
 
     def accept_input(self):
-        self.input_text = self.text_area.toPlainText()
+        self.result_notes = self.text_area.toPlainText()
+        if self.rb_cheat.isChecked(): self.result_type = "Cheater"
+        elif self.rb_sus.isChecked(): self.result_type = "Suspicious"
+        else: self.result_type = "Other"
         self.accept()
 
-def custom_edit_multiline(parent, px_func, title, prompt, initialvalue=""):
-    dlg = CustomNoteDialog(parent, title, prompt, initialvalue)
+    def on_delete(self):
+        ok = custom_popup(self, None, "Confirm Delete", "Delete this user entry?", is_confirmation=True)
+        if ok:
+            self.logic.delete_player(self.steamid)
+            self.was_deleted = True
+            self.accept()
+
+def custom_edit_user(parent, title, name, steamid, current_notes, current_type, logic):
+    dlg = EditUserDialog(parent, title, name, steamid, current_notes, current_type, logic)
     if dlg.exec():
-        return dlg.input_text
-    return None
+        if dlg.was_deleted:
+            return "DELETED", None
+        return dlg.result_notes, dlg.result_type
+    return None, None

@@ -94,16 +94,24 @@ class ListManager:
                             sid = convert_steamid64_to_steamid3(sid)
                         if not sid: continue
 
+                        proofs = p.get('proof', [])
+
                         if sid in all_data:
                             existing = all_data[sid]
                             if p.get('last_seen', {}).get('time', 0) > existing.get('last_seen', {}).get('time', 0):
                                 existing['last_seen'] = p['last_seen']
-                            existing['proof'] = list(set(existing.get('proof', []) + p.get('proof', [])))
+
                             existing['attributes'] = list(set(existing.get('attributes', []) + p.get('attributes', [])))
+
                             existing.setdefault('sources', []).append(fname)
+
+                            if proofs:
+                                existing.setdefault('proof_sources', {})[fname] = proofs
                         else:
                             all_data[sid] = {k:v for k,v in p.items() if k != 'steamid'}
                             all_data[sid]['sources'] = [fname]
+                            if proofs:
+                                all_data[sid]['proof_sources'] = {fname: proofs}
 
             except Exception as e:
                 errors.append(f"{fname}: {e}")
@@ -157,7 +165,7 @@ class ListManager:
             if isinstance(entries, list):
                 for e in entries:
                     if 'steamid' in e and 'player_type' in e:
-                        e.setdefault('last_seen_name', 'Unknown')
+                        e.setdefault('last_seen_name', '')
                         e.setdefault('time_added', 0)
                         e.setdefault('time_last_seen', e['time_added'])
                         clean_entries.append(e)
@@ -208,7 +216,7 @@ class ListManager:
                     "steamid": steamid,
                     "player_type": player_type,
                     "notes": notes or "",
-                    "last_seen_name": player_name if (player_name and save_names) else "Unknown",
+                    "last_seen_name": player_name if (player_name and save_names) else "",
                     "time_added": now if save_times else 0,
                     "time_last_seen": now if save_times else 0
                 }
@@ -251,14 +259,34 @@ class ListManager:
             for p in current_players:
                 existing = next((rp for rp in recent_list_ref if rp.steamid == p.steamid), None)
                 if existing:
-                    if p.name: existing.name = p.name
+                    existing.name = p.name
+
+                    if p.avatar_url: existing.avatar_url = p.avatar_url
+                    if p.account_age is not None:
+                        existing.account_age = p.account_age
+                    if p.tf2_playtime is not None:
+                        existing.tf2_playtime = p.tf2_playtime
+                    if p.vac_banned is not None:
+                        existing.vac_banned = p.vac_banned
+                    if p.game_bans is not None:
+                        existing.game_bans = p.game_bans
+                    if p.ban_count is not None:
+                        existing.ban_count = p.ban_count
+                    if p.sb_details is not None:
+                        existing.sb_details = p.sb_details
                     existing.player_type = p.player_type
                     existing.notes = p.notes
                 else:
                     new_p = PlayerInstance(
-                        p.userid, p.name, p.ping, p.steamid,
-                        p.kills, p.deaths, p.player_type, p.notes, p.team
+                        p.userid, p.name, 0, p.steamid,
+                        0, 0, p.player_type, p.notes, p.team
                     )
+                    new_p.avatar_url = p.avatar_url
+                    new_p.account_age = p.account_age
+                    new_p.tf2_playtime = p.tf2_playtime
+                    new_p.vac_banned = p.vac_banned
+                    new_p.game_bans = p.game_bans
+
                     recent_list_ref.append(new_p)
 
     def mark_recently_played(self, steamid, ptype, recent_list_ref):
@@ -271,12 +299,24 @@ class ListManager:
 
     def identify_player_type(self, steamid):
         with self.lock:
-            if steamid in self.tf2bd_cheaters or steamid in self.user_cheaters:
+            if steamid in self.tf2bd_cheaters:
                 return "Cheater"
-            if steamid in self.tf2bd_suspicious or steamid in self.user_suspicious:
+            if steamid in self.tf2bd_suspicious:
+                return "Suspicious"
+
+            if steamid in self.user_cheaters:
+                return "Cheater"
+            if steamid in self.user_suspicious:
                 return "Suspicious"
             if steamid in self.user_other:
                 return "Other"
+        return None
+
+    def get_user_mark(self, steamid):
+        with self.lock:
+            if steamid in self.user_cheaters: return "Cheater"
+            if steamid in self.user_suspicious: return "Suspicious"
+            if steamid in self.user_other: return "Other"
         return None
 
     def get_mark_label(self, steamid):
@@ -314,20 +354,32 @@ class ListManager:
         if steamid not in self.tf2bd_data: return "No TF2BD data."
         d = self.tf2bd_data[steamid]
         lines = []
-        if 'sources' in d:
-            lines.append(f"Source List(s): {', '.join(d['sources'])}")
+
         lines.append(f"Attributes: {', '.join(d.get('attributes', []))}")
-        if 'proof' in d:
-            proof = d['proof']
-            if isinstance(proof, list):
-                lines.append(f"Proof: {'; '.join(proof)}")
-            else:
-                lines.append(f"Proof: {proof}")
+
         if 'last_seen' in d:
              ls = d['last_seen']
              ts = datetime.datetime.fromtimestamp(ls.get('time', 0))
              lines.append(f"Last Seen: {ls.get('player_name')} at {ts}")
-        return "\n".join(lines)
+
+        lines.append("")
+
+        proof_sources = d.get('proof_sources', {})
+
+        if not proof_sources and 'proof' in d:
+             p_flat = d['proof']
+             if isinstance(p_flat, list):
+                 lines.append(f"Proof: {'; '.join(p_flat)}")
+             else:
+                 lines.append(f"Proof: {p_flat}")
+
+        for src, proofs in proof_sources.items():
+            lines.append(f"[{src}]")
+            for p in proofs:
+                lines.append(f"- {p}")
+            lines.append("")
+
+        return "\n".join(lines).strip()
 
     def export_to_tf2bd(self, path):
         out = {
@@ -364,10 +416,11 @@ class ListManager:
                 ts = e.get('time_last_seen', 0)
                 if ts == 0: ts = e.get('time_added', 0)
 
-                if ts > 0:
+                name = e.get('last_seen_name', '')
+                if ts > 0 and name and name != 'Unknown':
                     p_obj['last_seen'] = {
                         "time": ts,
-                        "player_name": e.get('last_seen_name', 'Unknown')
+                        "player_name": name
                     }
 
                 out['players'].append(p_obj)

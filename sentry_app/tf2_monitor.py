@@ -157,7 +157,7 @@ class TF2Monitor:
             is_connected = connected_data[idx_str]
             if is_connected == 'false': continue
 
-            # Bot filter: Ping == 0
+            # Bot filter: Ping == 0, alternative heuristic might be to filter steamids < 1k, or if servers can give bots fake ping (can...do they?), both
             try: ping_val = int(ping_data.get(idx_str, "0"))
             except ValueError: ping_val = 0
             if ping_val == 0: continue

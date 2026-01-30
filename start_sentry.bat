@@ -12,6 +12,6 @@ echo Checking dependencies...
 pip install -q -r requirements.txt
 
 echo Starting Sentry...
-python run.py
+python -X faulthandler run.py
 
 pause

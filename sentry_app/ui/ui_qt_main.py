@@ -17,6 +17,7 @@ from .ui_qt_settings import SettingsWindow
 from .ui_qt_aux_windows import UserListWindow, RecentPlayersWindow
 from .ui_qt_dialogs import custom_popup
 from .ui_qt_shared import SentryTable, ActionHandler, DeselectableWindowMixin, NumericTableWidgetItem
+from .ui_qt_details import PlayerDetailsWindow
 from ..consts import APP_VERSION
 
 COL_STACK = 0
@@ -42,6 +43,20 @@ class MainWindow(DeselectableWindowMixin, QMainWindow):
 
         self.user_scale = self.logic.get_setting_float("UI_Scale")
         if self.user_scale <= 0: self.user_scale = 1.0
+
+        self.base_widths = [40, 180, 60, 55, 75, 130, 55, 70, 60, 95, 100, 60, 0]
+
+        self.col_settings = {
+            COL_PING: 'Show_Ping_Column',
+            COL_KILLS: 'Show_Kills_Column',
+            COL_DEATHS: 'Show_Deaths_Column',
+            COL_STEAMID: 'Show_SteamID_Column',
+            COL_AGE: 'Show_Age_Column',
+            COL_HOURS: 'Show_Hours_Column',
+            COL_VAC: 'Show_VAC_Column',
+            COL_GAME_BANS: 'Show_GameBans_Column',
+            COL_SBANS: 'Show_SB_Column'
+        }
 
         self.data_queue = queue.Queue()
         self.is_fetching = False
@@ -77,9 +92,23 @@ class MainWindow(DeselectableWindowMixin, QMainWindow):
     def px(self, v):
         return int(v * self.user_scale)
 
+    def calculate_window_width(self):
+        total_width = 0
+        for i, w in enumerate(self.base_widths):
+            if i in self.col_settings:
+                if not self.logic.get_setting_bool(self.col_settings[i]):
+                    continue
+            total_width += w
+        return total_width
+
     def setup_ui(self):
-        w, h = self.px(950), self.px(950)
-        self.resize(w, h)
+        total_content_width = self.calculate_window_width()
+
+        buffer = 150
+        final_w = self.px(total_content_width + buffer)
+        final_h = self.px(950)
+
+        self.resize(final_w, final_h)
         self.setMinimumSize(self.px(600), self.px(400))
 
         central_widget = QWidget()
@@ -145,20 +174,21 @@ class MainWindow(DeselectableWindowMixin, QMainWindow):
         table.setHorizontalHeaderLabels(cols)
         table.verticalHeader().setDefaultSectionSize(self.px(28))
         table.setIconSize(QSize(self.px(24), self.px(24)))
+
         table.setSortingEnabled(True)
         table.sortByColumn(COL_KILLS, Qt.DescendingOrder)
+
         header = table.horizontalHeader()
         header.setSectionResizeMode(QHeaderView.Interactive)
         header.setStretchLastSection(True)
 
-        widths = [40, 180, 40, 40, 50, 130, 40, 45, 40, 75, 80, 60, 0]
-
-        show_sid = self.logic.get_setting_bool("Show_SteamID_Column")
-        if not show_sid:
-            table.setColumnHidden(COL_STEAMID, True)
-
+        widths = self.base_widths
         for i, w in enumerate(widths):
             if w > 0: table.setColumnWidth(i, self.px(w))
+
+        for col_idx, setting_key in self.col_settings.items():
+            should_show = self.logic.get_setting_bool(setting_key)
+            table.setColumnHidden(col_idx, not should_show)
 
         table.setSelectionBehavior(QAbstractItemView.SelectRows)
         table.setSelectionMode(QAbstractItemView.SingleSelection)
@@ -188,15 +218,17 @@ class MainWindow(DeselectableWindowMixin, QMainWindow):
 
     def on_double_click(self, row, col, table):
         sid_item = table.item(row, COL_STEAMID)
-        name_item = table.item(row, COL_NAME)
         steamid = sid_item.text() if sid_item else None
 
-        if col == COL_NOTES and steamid:
-            self.selected_steamid = steamid
-            self.selected_name = name_item.text() if name_item else ""
-            self.on_edit_notes()
-        elif col == COL_SBANS and steamid:
-            self.actions.view_sb(steamid)
+        if steamid:
+            self.open_details(steamid)
+
+    def open_details(self, steamid):
+        if not steamid: return
+        player_obj = self.logic.get_player_by_steamid(steamid)
+        if player_obj:
+            from .ui_qt_details import PlayerDetailsWindow
+            PlayerDetailsWindow(self, self.logic, player_obj, self.px).exec()
 
     def on_context_menu(self, pos, table):
         item = table.itemAt(pos)
@@ -217,8 +249,7 @@ class MainWindow(DeselectableWindowMixin, QMainWindow):
         mark_menu.addAction("Cheater", lambda: self.on_mark("Cheater"))
         mark_menu.addAction("Suspicious", lambda: self.on_mark("Suspicious"))
         mark_menu.addAction("Other", lambda: self.on_mark("Other"))
-
-        menu.addAction("Edit Notes", self.on_edit_notes)
+        menu.addAction("Edit User Entry", self.on_edit_entry)
         menu.addAction("Delete User Entry", self.on_delete)
         menu.addSeparator()
         menu.addAction("View SourceBans", lambda: self.actions.view_sb(self.selected_steamid))
@@ -232,6 +263,7 @@ class MainWindow(DeselectableWindowMixin, QMainWindow):
         kick_menu.addAction("Idle", lambda: self.actions.kick(self.selected_steamid, "idle"))
         kick_menu.addAction("Scamming", lambda: self.actions.kick(self.selected_steamid, "scamming"))
         menu.addAction("Copy SteamID", lambda: self.actions.copy_id(self.selected_steamid))
+        menu.addAction("View Player Details", lambda: self.open_details(self.selected_steamid))
 
         menu.exec(QCursor.pos())
 
@@ -240,11 +272,13 @@ class MainWindow(DeselectableWindowMixin, QMainWindow):
             new_type = self.actions.mark(self.selected_steamid, self.selected_name, ptype)
             self.apply_local_update(self.selected_steamid, ptype=new_type)
 
-    def on_edit_notes(self):
+    def on_edit_entry(self):
         if self.selected_steamid:
-            new_note = self.actions.edit_notes(self.selected_steamid, self.selected_name)
-            if new_note is not None:
-                self.apply_local_update(self.selected_steamid, note=new_note)
+            self.actions.edit_entry(self.selected_steamid, self.selected_name)
+
+            ptype = self.logic.lists.identify_player_type(self.selected_steamid)
+            note = self.logic.lists.get_user_notes(self.selected_steamid)
+            self.apply_local_update(self.selected_steamid, ptype=ptype, note=note)
 
     def on_delete(self):
         if self.selected_steamid:
@@ -286,6 +320,11 @@ class MainWindow(DeselectableWindowMixin, QMainWindow):
                             m_item.setText(mark_text)
                             m_item.setToolTip(mark_tooltip)
 
+                            if mark_text:
+                                f = m_item.font()
+                                f.setBold(True)
+                                m_item.setFont(f)
+
                         for c in range(table.columnCount()):
                             item = table.item(r, c)
                             if c == COL_NAME:
@@ -321,6 +360,7 @@ class MainWindow(DeselectableWindowMixin, QMainWindow):
             self.data_queue.put(res)
 
     def process_queue(self):
+        if self.is_closing: return
         try:
             while True:
                 res = self.data_queue.get_nowait()
@@ -330,6 +370,7 @@ class MainWindow(DeselectableWindowMixin, QMainWindow):
             pass
 
     def handle_data_result(self, result):
+        if self.is_closing: return
         status = result[0]
 
         steamid_status_msg = ""
@@ -355,11 +396,11 @@ class MainWindow(DeselectableWindowMixin, QMainWindow):
             self.clear_tables()
         elif status == 'connection_failed':
             text = (
-                "TF2 Found but RCon is unreachable. Check launch options/settings" + steamid_status_msg
+                "TF2 Found but RCon is unreachable. If this persists, check launch options/settings" + steamid_status_msg
             )
             color = "orange"
         elif status == 'banned':
-            text = "RCON Banned (Restart TF2)" + steamid_status_msg
+            text = "RCON Banned, restart TF2 (ignore if TF2 is closing)" + steamid_status_msg
             color = "red"
             self.clear_tables()
         elif status == 'auth_failed':
@@ -386,9 +427,9 @@ class MainWindow(DeselectableWindowMixin, QMainWindow):
 
         css_col = "white"
         if color == "darkcyan": css_col = "#008B8B"
-        elif color == "green": css_col = "#00FF00"
+        elif color == "green": css_col = "#44cc44"
         elif color == "orange": css_col = "#FFA500"
-        elif color == "red": css_col = "#FF5555"
+        elif color == "red": css_col = "#ff4444"
 
         self.lbl_status.setStyleSheet(f"color: {css_col}; font-weight: bold;")
 
@@ -414,10 +455,11 @@ class MainWindow(DeselectableWindowMixin, QMainWindow):
                 if pix.loadFromData(data):
                     icon = QIcon(pix)
                     self.icon_cache[url] = icon
-                    try:
-                        item.setIcon(icon)
-                    except (RuntimeError, AttributeError):
-                        pass
+                    if item.tableWidget() is not None:
+                        try:
+                            item.setIcon(icon)
+                        except RuntimeError:
+                            pass
             reply.deleteLater()
         reply.finished.connect(handle_load)
 
@@ -435,7 +477,7 @@ class MainWindow(DeselectableWindowMixin, QMainWindow):
         c_sus = QColor(self.logic.get_setting_color('Color_Suspicious'))
         c_oth = QColor(self.logic.get_setting_color('Color_Other'))
         my_sid = self.logic.get_current_user_steamid3()
-        sus_bans_set = getattr(self.logic, 'suspicious_steamids', set())
+        sus_bans_set = self.logic.get_suspicious_snapshot()
 
         def update_cell(r, c, text_val, sort_val=None, bg=None, is_numeric=False, tooltip=None):
             item = table.item(r, c)
@@ -523,23 +565,39 @@ class MainWindow(DeselectableWindowMixin, QMainWindow):
 
             update_cell(row, COL_HOURS, hr_text, sort_val=minutes, bg=None, is_numeric=True)
 
-            vac_text = "VAC" if p.vac_banned else ""
-            vac_sort = 1 if p.vac_banned else 0
-            v_item = update_cell(row, COL_VAC, vac_text, sort_val=vac_sort, bg=None, is_numeric=True)
+            if p.vac_banned is True:
+                vac_text = "VAC"
+                vac_sort = 2
+            elif p.vac_banned is False:
+                vac_text = ""
+                vac_sort = 1
+            else:
+                vac_text = "?"
+                vac_sort = 0
 
-            if p.vac_banned:
+            v_item = update_cell(row, COL_VAC, vac_text, sort_val=vac_sort, bg=None, is_numeric=False)
+            if p.vac_banned is True:
                 v_item.setForeground(QColor("#ff4444"))
                 f = v_item.font(); f.setBold(True); v_item.setFont(f)
             else:
                 v_item.setData(Qt.ForegroundRole, None)
                 f = v_item.font(); f.setBold(False); v_item.setFont(f)
 
-            gb_text = str(p.game_bans) if p.game_bans > 0 else ""
-            update_cell(row, COL_GAME_BANS, gb_text, sort_val=p.game_bans, bg=None, is_numeric=True)
+            if isinstance(p.game_bans, int):
+                gb_sort = p.game_bans
+                gb_text = str(p.game_bans) if p.game_bans > 0 else ""
+            else:
+                gb_sort = -1
+                gb_text = "?"
 
-            sb_text = str(p.ban_count) if p.ban_count != "" else ""
-            try: sb_sort = int(p.ban_count) if p.ban_count != "" else 0
-            except: sb_sort = 0
+            gb_item = update_cell(row, COL_GAME_BANS, gb_text, sort_val=gb_sort, bg=None, is_numeric=True)
+
+            if isinstance(p.ban_count, int):
+                sb_sort = p.ban_count
+                sb_text = str(p.ban_count) if p.ban_count > 0 else ""
+            else:
+                sb_sort = -1
+                sb_text = "?"
 
             sb_item = update_cell(row, COL_SBANS, sb_text, sort_val=sb_sort, bg=None, is_numeric=True)
 
@@ -550,14 +608,14 @@ class MainWindow(DeselectableWindowMixin, QMainWindow):
                 f.setBold(True)
                 sb_item.setForeground(QColor("#ff4444"))
                 sb_item.setToolTip("Suspicious keywords found in ban history")
-            elif sb_sort > 0:
-                f.setBold(False)
-                sb_item.setData(Qt.ForegroundRole, None)
-                sb_item.setToolTip(f"{sb_sort} SourceBans found")
             else:
                 f.setBold(False)
                 sb_item.setData(Qt.ForegroundRole, None)
-                sb_item.setToolTip("")
+                if sb_sort > 0:
+                    sb_item.setToolTip(f"{sb_sort} SourceBans found")
+                else:
+                    sb_item.setToolTip("")
+
             sb_item.setFont(f)
 
             mark_item = update_cell(row, COL_MARK, p.mark_label, bg=None, tooltip=p.mark_tooltip)
@@ -565,6 +623,11 @@ class MainWindow(DeselectableWindowMixin, QMainWindow):
                 mark_item.setForeground(status_fg)
             else:
                 mark_item.setData(Qt.ForegroundRole, None)
+
+            if p.mark_label:
+                mf = mark_item.font()
+                mf.setBold(True)
+                mark_item.setFont(mf)
 
             update_cell(row, COL_NOTES, p.notes or "", bg=None)
 

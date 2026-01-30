@@ -1,4 +1,4 @@
-APP_VERSION = "1.1.1"
+APP_VERSION = "1.2.0"
 
 DEFAULT_SETTINGS = {
     'User': '[U:1:XXXXXXXXXX]',
@@ -7,10 +7,8 @@ DEFAULT_SETTINGS = {
     'RCon_Port': '27015',
     'Steam_API_Key': '',
     'SteamHistory_API_Key': '',
-    'Enable_Sourcebans_Lookup': 'False',
     'Auto_Update_TF2BD_Lists': 'False',
     'Kick_Cheaters': 'False',
-    'Kick_Cheaters_Interval': '10',
     'Announce_Cheaters': 'False',
     'Announce_Cheaters_Interval': '15',
     'Party_Announce_Cheaters': 'False',
@@ -22,5 +20,13 @@ DEFAULT_SETTINGS = {
     'Color_Other': '#888888',      # Gray
     'Save_Player_Names': 'True',
     'Save_Player_Timestamps': 'True',
-    'Show_SteamID_Column': 'False'
+    'Show_SteamID_Column': 'False',
+    'Show_Ping_Column': 'True',
+    'Show_Kills_Column': 'True',
+    'Show_Deaths_Column': 'True',
+    'Show_Age_Column': 'True',
+    'Show_Hours_Column': 'True',
+    'Show_VAC_Column': 'False',
+    'Show_GameBans_Column': 'False',
+    'Show_SB_Column': 'True'
 }

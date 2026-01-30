@@ -6,7 +6,7 @@ from PySide6.QtWidgets import (QDialog, QVBoxLayout, QPushButton, QTextEdit,
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QCursor
 
-from .ui_qt_dialogs import custom_popup, custom_edit_multiline
+from .ui_qt_dialogs import custom_popup, custom_edit_user
 from ..utils import convert_steamid3_to_steamid64
 
 class NumericTableWidgetItem(QTableWidgetItem):
@@ -72,14 +72,16 @@ class ActionHandler:
         self.logic.mark_player(steamid, ptype, name=name)
         return ptype
 
-    def edit_notes(self, steamid, name):
-        curr = self.logic.lists.get_user_notes(steamid)
-        new_note = custom_edit_multiline(self.parent, None, "Edit Notes", "Enter notes:", initialvalue=curr)
-        if new_note is not None:
-            ptype = self.logic.lists.identify_player_type(steamid) or "Other"
-            self.logic.mark_player(steamid, ptype, notes=new_note, name=name)
-            return new_note
-        return None
+    def edit_entry(self, steamid, name):
+        curr_notes = self.logic.lists.get_user_notes(steamid)
+        curr_type = self.logic.lists.get_user_mark(steamid) or "Other"
+
+        new_note, new_type = custom_edit_user(self.parent, "Edit User Entry", name, steamid, curr_notes, curr_type, self.logic)
+
+        if new_note is not None and new_type is not None:
+             self.logic.mark_player(steamid, new_type, notes=new_note, name=name)
+             return True
+        return False
 
     def delete(self, steamid, name):
         if custom_popup(self.parent, None, "Confirm", f"Delete entry for {name} - {steamid}?", is_confirmation=True):
@@ -110,11 +112,17 @@ class ActionHandler:
         for b in data:
             bd = datetime.datetime.fromtimestamp(b.get('BanTimestamp', 0)).strftime('%Y-%m-%d')
             lines.append(f"Date: {bd}\nServer: {b.get('Server')}\nReason: {b.get('BanReason')}\nState: {b.get('CurrentState')}\n")
-        TextViewer(self.parent, f"SourceBans - {steamid}", "\n".join(lines)).exec()
+
+        p = self.logic.get_player_by_steamid(steamid)
+        name = p.name if p else ""
+        TextViewer(self.parent, f"SourceBans - {name} ({steamid})", "\n".join(lines)).exec()
 
     def view_tf2bd(self, steamid):
         notes = self.logic.lists.get_tf2bd_notes(steamid)
         if not notes or not notes.strip():
             custom_popup(self.parent, None, "TF2BD Info", "No TF2BD data found for this player.")
             return
-        TextViewer(self.parent, f"TF2BD Info - {steamid}", notes).exec()
+
+        p = self.logic.get_player_by_steamid(steamid)
+        name = p.name if p else ""
+        TextViewer(self.parent, f"TF2BD Info - {name} ({steamid})", notes).exec()

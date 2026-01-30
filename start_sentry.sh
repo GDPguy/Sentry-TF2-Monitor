@@ -13,4 +13,4 @@ echo "Checking dependencies..."
 pip install -q -r requirements.txt
 
 echo "Starting Sentry..."
-python3 run.py
+python3 -X faulthandler run.py
