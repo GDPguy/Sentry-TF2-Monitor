@@ -43,7 +43,7 @@ class AppLogic:
 
         self.last_kick_time = 0.0
         self.vote_next_allowed_time = 0.0
-        self.vote_creation_cooldown = 170.0
+        self.vote_creation_cooldown = 175.0
         self.last_announce_time = 0.0
         self.automation_lock = threading.Lock()
         self._automation_stop = threading.Event()
