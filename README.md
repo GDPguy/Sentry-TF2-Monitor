@@ -10,22 +10,33 @@ Sentry is a cross-platform tool for Team Fortress 2 to monitor in-game players i
 ## Features
 - **Cheater detection / tagging**
   - Uses TF2 Bot Detector player lists and your own user list.
-  - Mark players as **Cheater / Suspicious / Other** by right-clicking.
-  - Attach notes to a player by double-clicking the 'notes' section of a player to quick edit, or use the context menu
+  - Mark players as **Cheater / Suspicious / Other**
 - **Automation (off by default)**
   - Announce connected cheaters to global chat
   - Automatically callvote-kick detected cheaters
   - Party chat announcements:
     - Notifies party chat when new cheaters are detected/present in a server
     - Notifies party chat when players with suspicious SourceBans are detected (keyword matches e.g. "aimbot")
-      - Players with suspicious SourceBans are indicated in the GUI with bold red text. Double-click or use the context menu to view them
+      - Players with suspicious SourceBans are indicated in the GUI with bold red text.
 - **User list management**
-  - Edit entries and notes from the GUI.
+  - Edit the user list directly from the GUI
   - Export your list in TF2BD format from the User List Manager for sharing
 - **Social Graph**
   - See who is friends with who
   - **Player relationships:** If Player A is friends with B, and B is friends with C, they are all identified as a single linked group. This feature is intended for Casual Mode to identify potential party stacks.
   - **Tooltips:** Hover over the cell in the `#` column to see exactly how a group is connected. It distinguishes between **Direct Friends** (Steam friends) and **Indirectly Linked** players (friends of friends).
+- **Player Details**
+  - Open a detailed profile view for any player (double-click or context menu).
+  - Shows:
+    - User Avatar & some useful information, such as:
+    - Copyable SteamID3/64 
+    - Quick links to sites such as logs.tf/rep.tf/steamhistory/etc
+    - VAC status + game bans (Steam Web API)
+    - full SourceBans history (SteamHistory API)
+    - TF2BD list data for this player (if present)
+    - Shows this player's friends / “Marked Friends” stats (breakdown of marked cheater/suspicious friends from TF2BD + user list)
+  - Edit the player’s user entry directly from this window as well
+
 ## Download (Recommended)
 Most users should **download the latest precompiled release**.
 
