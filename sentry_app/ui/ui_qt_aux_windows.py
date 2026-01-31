@@ -395,6 +395,7 @@ class RecentPlayersWindow(BaseAuxWindow):
                             name_item = self.table.item(r, self.name_col)
                             if name_item:
                                 name_item.setIcon(icon)
+                            break
             reply.deleteLater()
 
         reply.finished.connect(handle_load)
