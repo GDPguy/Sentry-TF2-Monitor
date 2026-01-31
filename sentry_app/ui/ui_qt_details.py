@@ -34,6 +34,17 @@ class PlayerDetailsWindow(QDialog):
 
         self.setup_ui()
 
+    def closeEvent(self, event):
+        try:
+            if hasattr(self, 'avatar_reply') and self.avatar_reply:
+                if self.avatar_reply.isRunning():
+                    self.avatar_reply.abort()
+                self.avatar_reply.deleteLater()
+                self.avatar_reply = None
+        except Exception:
+            pass
+        super().closeEvent(event)
+
     def setup_ui(self):
         main_layout = QVBoxLayout(self)
         main_layout.setSpacing(15)
@@ -333,6 +344,14 @@ class PlayerDetailsWindow(QDialog):
 
     def on_avatar_loaded(self):
         reply = self.sender()
+        if not reply:
+            return
+
+        if not self.isVisible():
+            reply.deleteLater()
+            self.avatar_reply = None
+            return
+
         if reply.error() == QNetworkReply.NoError:
             data = reply.readAll()
             pix = QPixmap()
@@ -341,7 +360,9 @@ class PlayerDetailsWindow(QDialog):
                     pix.scaled(self.lbl_avatar.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
                 )
                 self.lbl_avatar.setText("")
+
         reply.deleteLater()
+        self.avatar_reply = None
 
     def save_entry(self):
         txt = self.txt_notes.toPlainText()

@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
 from PySide6.QtCore import Qt, QTimer, QUrl, QSize
 from PySide6.QtGui import QAction, QColor, QCursor, QFont, QPixmap, QIcon
 from PySide6.QtNetwork import QNetworkAccessManager, QNetworkRequest, QNetworkReply
+from shiboken6 import isValid
 
 from .ui_qt_settings import SettingsWindow
 from .ui_qt_aux_windows import UserListWindow, RecentPlayersWindow
@@ -19,6 +20,7 @@ from .ui_qt_dialogs import custom_popup
 from .ui_qt_shared import SentryTable, ActionHandler, DeselectableWindowMixin, NumericTableWidgetItem
 from .ui_qt_details import PlayerDetailsWindow
 from ..consts import APP_VERSION
+
 
 COL_STACK = 0
 COL_NAME = 1
@@ -67,7 +69,7 @@ class MainWindow(DeselectableWindowMixin, QMainWindow):
 
         self.setup_ui()
 
-        self.nam = QNetworkAccessManager()
+        self.nam = QNetworkAccessManager(self)
         self.icon_cache = {}
 
         self.queue_timer = QTimer(self)
@@ -437,30 +439,45 @@ class MainWindow(DeselectableWindowMixin, QMainWindow):
         for t in [self.red_table, self.blue_table, self.spec_table]:
             t['table'].setRowCount(0)
 
-
-    def set_avatar(self, item, url):
+    def set_avatar(self, table, steamid, url):
         if not url: return
 
         if url in self.icon_cache:
-            item.setIcon(self.icon_cache[url])
+            for r in range(table.rowCount()):
+                sid_item = table.item(r, COL_STEAMID)
+                if sid_item and sid_item.text() == steamid:
+                    name_item = table.item(r, COL_NAME)
+                    if name_item:
+                        name_item.setIcon(self.icon_cache[url])
             return
 
         req = QNetworkRequest(QUrl(url))
         reply = self.nam.get(req)
 
         def handle_load():
+            if self.is_closing:
+                reply.deleteLater()
+                return
+            if not isValid(table):
+                reply.deleteLater()
+                return
+
             if reply.error() == QNetworkReply.NoError:
                 data = reply.readAll()
                 pix = QPixmap()
                 if pix.loadFromData(data):
                     icon = QIcon(pix)
                     self.icon_cache[url] = icon
-                    if item.tableWidget() is not None:
-                        try:
-                            item.setIcon(icon)
-                        except RuntimeError:
-                            pass
+                    for r in range(table.rowCount()):
+                        sid_item = table.item(r, COL_STEAMID)
+                        if sid_item and sid_item.text() == steamid:
+                            name_item = table.item(r, COL_NAME)
+                            if name_item:
+                                name_item.setIcon(self.icon_cache[url])
+                            break
+
             reply.deleteLater()
+
         reply.finished.connect(handle_load)
 
     def update_table(self, table, players):
@@ -542,7 +559,7 @@ class MainWindow(DeselectableWindowMixin, QMainWindow):
                 s_item.setData(Qt.ForegroundRole, None)
 
             name_item = update_cell(row, COL_NAME, p.name, bg=status_bg)
-            if p.avatar_url: self.set_avatar(name_item, p.avatar_url)
+            if p.avatar_url: self.set_avatar(table, p.steamid, p.avatar_url)
 
             update_cell(row, COL_PING, p.ping, sort_val=p.ping, bg=None, is_numeric=True)
 

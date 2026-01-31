@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, QTimer, QUrl, QSize
 from PySide6.QtGui import QAction, QColor, QCursor, QPixmap, QIcon
 from PySide6.QtNetwork import QNetworkAccessManager, QNetworkRequest, QNetworkReply
+from shiboken6 import isValid
 
 from .ui_qt_dialogs import custom_popup
 from .ui_qt_shared import (
@@ -361,29 +362,41 @@ class RecentPlayersWindow(BaseAuxWindow):
             if self.actions.delete(self.sel_sid, self.sel_name):
                 self.apply_local_update(self.sel_sid, ptype="CLEAR", note="")
 
-    def set_avatar(self, item, url):
+    def set_avatar(self, steamid, url):
         if not url: return
 
         if url in self.icon_cache:
-            item.setIcon(self.icon_cache[url])
+            for r in range(self.table.rowCount()):
+                sid_item = self.table.item(r, self.steamid_col)
+                if sid_item and sid_item.text() == steamid:
+                    name_item = self.table.item(r, self.name_col)
+                    if name_item:
+                        name_item.setIcon(self.icon_cache[url])
             return
 
         req = QNetworkRequest(QUrl(url))
         reply = self.nam.get(req)
 
         def handle_load():
+            if not isValid(self.table):
+                reply.deleteLater()
+                return
+
             if reply.error() == QNetworkReply.NoError:
                 data = reply.readAll()
                 pix = QPixmap()
                 if pix.loadFromData(data):
                     icon = QIcon(pix)
                     self.icon_cache[url] = icon
-                    if item.tableWidget() is not None:
-                        try:
-                            item.setIcon(icon)
-                        except RuntimeError:
-                            pass
+
+                    for r in range(self.table.rowCount()):
+                        sid_item = self.table.item(r, self.steamid_col)
+                        if sid_item and sid_item.text() == steamid:
+                            name_item = self.table.item(r, self.name_col)
+                            if name_item:
+                                name_item.setIcon(icon)
             reply.deleteLater()
+
         reply.finished.connect(handle_load)
 
     def apply_local_update(self, steamid, ptype="NO_CHANGE", note="NO_CHANGE"):
@@ -519,7 +532,7 @@ class RecentPlayersWindow(BaseAuxWindow):
                         else:
                             if cur_bg.isValid() and cur_bg.alpha() > 0: item.setData(Qt.BackgroundRole, None)
 
-                        if p.avatar_url: self.set_avatar(item, p.avatar_url)
+                        if p.avatar_url: self.set_avatar(p.steamid, p.avatar_url)
 
                     elif col == self.mark_col:
                         if text_color: item.setForeground(text_color)
@@ -534,7 +547,7 @@ class RecentPlayersWindow(BaseAuxWindow):
                     item.setTextAlignment(Qt.AlignCenter)
                     if col == self.name_col:
                         if bg_color: item.setBackground(bg_color)
-                        if p.avatar_url: self.set_avatar(item, p.avatar_url)
+                        if p.avatar_url: self.set_avatar(p.steamid, p.avatar_url)
                     if col == self.mark_col:
                         item.setToolTip(tooltip)
                         if text_color: item.setForeground(text_color)
