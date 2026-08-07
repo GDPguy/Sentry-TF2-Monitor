@@ -1,5 +1,44 @@
 APP_VERSION = "1.2.0"
 
+# Built-in TF2BD community player lists shipped with the app. Each entry is
+# (display_name, url, filename) where `filename` is what the JSON will be
+# saved as locally under tf2bd_lists/ and what the in-app list manager
+# keys on. The URL is what we fetch from; once a file is saved, its own
+# file_info.update_url becomes the source of truth for subsequent
+# auto-updates.
+#
+# These were verified to be reachable and use the v3 TF2BD schema. The
+# official PazerOP list isn't hosted publicly (it ships inside the TF2BD
+# binary, and that repo was archived March 2024), so we fall back to
+# community-maintained lists.
+BUILTIN_TF2BD_LISTS = [
+    (
+        "Cleffy's TF2BD List",
+        'https://raw.githubusercontent.com/Cl3ffy/cleffy-list/main/playerlist.cleffy.json',
+        'playerlist.cleffy.json',
+    ),
+    (
+        "joekiller's TF2BD List",
+        'https://raw.githubusercontent.com/joekiller/joekiller-list/main/playerlist.joekiller.json',
+        'playerlist.joekiller.json',
+    ),
+    (
+        "qfoxb's TF2BD List",
+        'https://raw.githubusercontent.com/qfoxb/tf2bd-lists/main/playerlist.qfoxb.json',
+        'playerlist.qfoxb.json',
+    ),
+    (
+        "Classic's TF2BD List (US East)",
+        'https://raw.githubusercontent.com/Classic-Gaming/tf2db/main/playerlist.classic.json',
+        'playerlist.classic.json',
+    ),
+    (
+        "TF2 Bot Detector ASEAN List",
+        'https://raw.githubusercontent.com/Critical-Cookie/TF2BD-ASEAN-LIST/main/playerlist.asean.json',
+        'playerlist.asean.json',
+    ),
+]
+
 DEFAULT_SETTINGS = {
     'User': '[U:1:XXXXXXXXXX]',
     'Use_Manual_SteamID': 'False',

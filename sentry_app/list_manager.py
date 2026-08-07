@@ -7,8 +7,16 @@ import datetime
 import requests
 from .utils import atomic_write_bytes, convert_steamid64_to_steamid3
 from .models import PlayerInstance
+from .consts import BUILTIN_TF2BD_LISTS
+
 
 class ListManager:
+    # File that stores per-list settings (enabled / auto_update / url /
+    # filename) for both built-in and user-added lists. Built-ins start
+    # with defaults (enabled + auto_update) the first time the user runs
+    # the app; toggles here override the defaults.
+    LISTS_CONFIG_FILENAME = 'tf2bd_lists.json'
+
     def __init__(self, config_manager, state_lock):
         self.cfg = config_manager
         self.lock = state_lock
@@ -16,6 +24,7 @@ class ListManager:
         self.cfg_dir = 'cfg'
         self.tf2bd_dir = 'tf2bd_lists'
         self.userlist_path = os.path.join(self.cfg_dir, 'userlist.json')
+        self.lists_config_path = os.path.join(self.cfg_dir, self.LISTS_CONFIG_FILENAME)
 
         self.tf2bd_data = {}
         self.tf2bd_cheaters = []
@@ -30,7 +39,20 @@ class ListManager:
         self.userlist_error = None
         self.tf2bd_error = None
 
+        # Ordered list of dicts: {name, url, filename, enabled, auto_update,
+        # is_builtin, last_updated, last_status, last_player_count}. The
+        # UI reads/writes this through the methods below; the file scan in
+        # _read_tf2bd_lists() is the source of truth for player contents,
+        # but this list decides which URLs we fetch and what we display.
+        self.lists_config = []
+
+        # Status of the last auto-update / bootstrap run. The UI reads this
+        # so the user can see what happened (instead of getting silent
+        # print()s into a --noconsole build).
+        self.last_update_status = ""
+
         self._ensure_dirs()
+        self._load_lists_config()
 
     def _ensure_dirs(self):
         os.makedirs(self.cfg_dir, exist_ok=True)
@@ -43,6 +65,152 @@ class ListManager:
         self.load_tf2bd_data()
         self.load_user_entries()
 
+    # --- TF2BD lists config (cfg/tf2bd_lists.json) -------------------------
+    #
+    # Each entry is a dict:
+    #   {name, url, filename, enabled, auto_update, is_builtin,
+    #    last_updated (epoch), last_status (str), last_player_count (int)}
+    #
+    # Built-ins live in BUILTIN_TF2BD_LISTS in consts.py and get added the
+    # first time the app runs (or whenever a new build of Sentry introduces
+    # a new built-in). User-added entries live in the JSON file with
+    # is_builtin=False and can be removed.
+
+    def _load_lists_config(self):
+        """Load cfg/tf2bd_lists.json. On first run (or after an upgrade that
+        added new built-ins), seed it with the BUILTIN_TF2BD_LISTS so the UI
+        shows a sensible default. Existing user entries are preserved."""
+        try:
+            with open(self.lists_config_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            if not isinstance(data, dict) or 'lists' not in data:
+                data = {'lists': []}
+        except (FileNotFoundError, json.JSONDecodeError):
+            data = {'lists': []}
+
+        # Merge in built-ins: any built-in that isn't already represented
+        # in the saved config gets added (with default enabled/auto_update).
+        existing_urls = {entry.get('url') for entry in data['lists']}
+        for name, url, filename in BUILTIN_TF2BD_LISTS:
+            if url not in existing_urls:
+                data['lists'].append({
+                    'name': name,
+                    'url': url,
+                    'filename': filename,
+                    'enabled': True,
+                    'auto_update': True,
+                    'is_builtin': True,
+                    'last_updated': 0.0,
+                    'last_status': '',
+                    'last_player_count': 0,
+                })
+            else:
+                # Make sure is_builtin is set correctly (in case the user
+                # hand-edited the file).
+                for entry in data['lists']:
+                    if entry.get('url') == url:
+                        entry['is_builtin'] = True
+                        break
+
+        self.lists_config = data['lists']
+        self._save_lists_config()
+
+    def _save_lists_config(self):
+        try:
+            atomic_write_bytes(
+                self.lists_config_path,
+                json.dumps({'lists': self.lists_config}, indent=2).encode('utf-8'),
+            )
+        except Exception as e:
+            print(f"Error saving lists config: {e}")
+
+    def get_lists(self):
+        """Return a deep-ish copy of the lists config for the UI to render.
+        Mutations go back through set_list_* / add_custom_list / remove_list."""
+        return [dict(entry) for entry in self.lists_config]
+
+    def _find_list_index(self, url):
+        for i, entry in enumerate(self.lists_config):
+            if entry.get('url') == url:
+                return i
+        return -1
+
+    def set_list_enabled(self, url, enabled):
+        i = self._find_list_index(url)
+        if i < 0: return False
+        self.lists_config[i]['enabled'] = bool(enabled)
+        self._save_lists_config()
+        return True
+
+    def set_list_auto_update(self, url, auto_update):
+        i = self._find_list_index(url)
+        if i < 0: return False
+        self.lists_config[i]['auto_update'] = bool(auto_update)
+        self._save_lists_config()
+        return True
+
+    def add_custom_list(self, name, url, enabled=True, auto_update=True):
+        """Add a user-supplied list. Returns True on success, False if the
+        URL is already present or invalid."""
+        if not url or not isinstance(url, str):
+            return False
+        if self._find_list_index(url) >= 0:
+            return False
+        # Derive a local filename from the URL basename; fall back to a
+        # sanitized version of the name if the URL has no obvious file.
+        from urllib.parse import urlparse
+        path = urlparse(url).path
+        basename = os.path.basename(path.rstrip('/')) if path else ''
+        if not basename or not basename.lower().endswith('.json'):
+            safe = ''.join(c for c in name if c.isalnum() or c in ('-', '_')).strip()
+            basename = f"playerlist.{safe or 'custom'}.json"
+
+        self.lists_config.append({
+            'name': name or basename,
+            'url': url,
+            'filename': basename,
+            'enabled': bool(enabled),
+            'auto_update': bool(auto_update),
+            'is_builtin': False,
+            'last_updated': 0.0,
+            'last_status': '',
+            'last_player_count': 0,
+        })
+        self._save_lists_config()
+        return True
+
+    def remove_list(self, url):
+        """Remove a user-added list. Built-in lists cannot be removed (only
+        disabled) to keep the curated defaults available across upgrades."""
+        i = self._find_list_index(url)
+        if i < 0: return False
+        if self.lists_config[i].get('is_builtin'):
+            return False
+        # Also delete the local file so the list doesn't keep showing up
+        # in the in-game tables after the user removes it.
+        fn = self.lists_config[i].get('filename')
+        if fn:
+            fpath = os.path.join(self.tf2bd_dir, fn)
+            try:
+                if os.path.exists(fpath):
+                    os.remove(fpath)
+            except OSError:
+                pass
+        del self.lists_config[i]
+        self._save_lists_config()
+        self._reload_tf2bd_from_disk()
+        return True
+
+    def _record_list_result(self, url, ok, status_msg, player_count):
+        i = self._find_list_index(url)
+        if i < 0: return
+        self.lists_config[i]['last_updated'] = time.time()
+        self.lists_config[i]['last_status'] = status_msg
+        self.lists_config[i]['last_player_count'] = player_count
+        self._save_lists_config()
+
+    # --- end TF2BD lists config --------------------------------------------
+
     def load_tf2bd_data(self):
         self._reload_tf2bd_from_disk()
         if self.cfg.get_bool("Auto_Update_TF2BD_Lists"):
@@ -50,13 +218,95 @@ class ListManager:
 
     def _background_update_worker(self):
         print("[Auto-Update] Starting background update...")
+        messages = []
+
+        # If the user has no lists yet, download the default ones first so
+        # future runs of update_tf2bd_lists() have something to refresh.
         try:
-            self.update_tf2bd_lists()
-            print("[Auto-Update] Update complete. Reloading lists...")
-            self._reload_tf2bd_from_disk()
-            print("[Auto-Update] Lists reloaded successfully.")
+            existing = [f for f in os.listdir(self.tf2bd_dir) if f.endswith('.json')]
+            if not existing:
+                boot_msgs = self.bootstrap_default_lists()
+                messages.extend(boot_msgs)
         except Exception as e:
-            print(f"[Auto-Update] Error: {e}")
+            messages.append(f"Bootstrap error: {e}")
+
+        try:
+            update_msgs = self.update_tf2bd_lists()
+            messages.extend(update_msgs)
+        except Exception as e:
+            messages.append(f"Update error: {e}")
+
+        try:
+            self._reload_tf2bd_from_disk()
+            messages.append("Lists reloaded.")
+        except Exception as e:
+            messages.append(f"Reload error: {e}")
+
+        self.last_update_status = " | ".join(m for m in messages if m)
+        print(f"[Auto-Update] {self.last_update_status}")
+
+    def bootstrap_default_lists(self):
+        """Download every enabled entry in self.lists_config that doesn't
+        have a local file yet. Returns a list of human-readable status
+        messages."""
+        messages = []
+        for entry in self.lists_config:
+            if not entry.get('enabled', True):
+                continue
+            filename = entry.get('filename')
+            if not filename:
+                continue
+            fpath = os.path.join(self.tf2bd_dir, filename)
+            if os.path.exists(fpath):
+                continue
+            try:
+                msg = self._download_list_to_file(entry['url'], filename)
+                messages.append(msg)
+            except Exception as e:
+                messages.append(f"Failed to fetch {entry['url']}: {e}")
+        return messages
+
+    def _download_list_to_file(self, url, filename):
+        """Fetch a single TF2BD-format JSON list from `url` and save it to
+        tf2bd_lists/<filename>. Validates that it has the expected schema
+        fields, preserves the URL as file_info.update_url so future
+        auto-updates keep working, and returns a status string."""
+        resp = requests.get(url, timeout=15)
+        resp.raise_for_status()
+        data = resp.json()
+
+        if not isinstance(data, dict) or 'players' not in data:
+            raise ValueError(f"Response from {url} is not a valid TF2BD list (no 'players' field)")
+
+        if 'file_info' not in data or not isinstance(data['file_info'], dict):
+            data['file_info'] = {}
+        # Preserve the URL so subsequent runs of update_tf2bd_lists() will
+        # refresh this file in place instead of re-bootstrapping it.
+        data['file_info']['update_url'] = url
+
+        fpath = os.path.join(self.tf2bd_dir, filename)
+        json_bytes = json.dumps(data, indent=2).encode('utf-8')
+        atomic_write_bytes(fpath, json_bytes)
+
+        title = data.get('file_info', {}).get('title', filename)
+        n_players = len(data.get('players', []))
+        self._record_list_result(url, True, f"Downloaded ({n_players} players)", n_players)
+        return f"Downloaded {filename} ({n_players} players, title={title!r})"
+
+    def force_update_now(self):
+        """Run bootstrap + per-file update synchronously for all enabled
+        lists and return a human-readable summary string. Intended for
+        the UI's manual 'Update' button so the user sees something happen."""
+        messages = []
+        try:
+            messages.extend(self.bootstrap_default_lists())
+            messages.extend(self.update_tf2bd_lists())
+            self._reload_tf2bd_from_disk()
+            messages.append("Lists reloaded.")
+        except Exception as e:
+            messages.append(f"Error: {e}")
+        self.last_update_status = " | ".join(m for m in messages if m)
+        return self.last_update_status
 
     def _reload_tf2bd_from_disk(self):
         new_data, error_msg = self._read_tf2bd_lists()
@@ -122,18 +372,40 @@ class ListManager:
         return all_data, err_msg
 
     def update_tf2bd_lists(self):
-        print("[Auto-Update] Checking TF2BD lists...")
-        for fname in os.listdir(self.tf2bd_dir):
-            if fname.endswith('.json'):
-                self._update_json_file(os.path.join(self.tf2bd_dir, fname))
+        """For each enabled list with auto_update=True, refresh its file from
+        the URL embedded in the file's own file_info.update_url (or, if
+        missing, the URL stored in self.lists_config). Returns a list of
+        human-readable status messages."""
+        messages = []
+        for entry in self.lists_config:
+            if not entry.get('enabled', True):
+                continue
+            if not entry.get('auto_update', True):
+                continue
+            filename = entry.get('filename')
+            if not filename:
+                continue
+            fpath = os.path.join(self.tf2bd_dir, filename)
+            if not os.path.exists(fpath):
+                # Skip silently - bootstrap_default_lists() handles downloads.
+                continue
+            msg = self._update_json_file(fpath, entry.get('url'))
+            if msg:
+                messages.append(msg)
+                print(msg)
+        return messages
 
-    def _update_json_file(self, fpath):
+    def _update_json_file(self, fpath, fallback_url=None):
+        """Refresh fpath from its embedded file_info.update_url. If that's
+        missing but fallback_url is provided, use that. Records the result
+        on the matching lists_config entry. Returns a status string."""
         try:
             with open(fpath, 'r', encoding='utf-8') as f:
                 data = json.load(f)
 
-            url = data.get('file_info', {}).get('update_url')
-            if not url: return
+            url = data.get('file_info', {}).get('update_url') or fallback_url
+            if not url:
+                return None
 
             resp = requests.get(url, timeout=10)
             resp.raise_for_status()
@@ -151,9 +423,24 @@ class ListManager:
                 json_bytes = json.dumps(new_data, indent=2).encode('utf-8')
                 atomic_write_bytes(fpath, json_bytes)
 
-                print(f"Updated {os.path.basename(fpath)}")
+                n_players = len(new_data.get('players', []))
+                self._record_list_result(url, True, f"Updated ({n_players} players)", n_players)
+                return f"Updated {os.path.basename(fpath)}"
+            else:
+                n_players = len(data.get('players', [])) if isinstance(data.get('players'), list) else 0
+                self._record_list_result(url, True, "Already up to date", n_players)
+                return f"{os.path.basename(fpath)}: already up to date"
         except Exception as e:
-            print(f"Error updating {os.path.basename(fpath)}: {e}")
+            msg = f"Error updating {os.path.basename(fpath)}: {e}"
+            try:
+                with open(fpath, 'r', encoding='utf-8') as f:
+                    d = json.load(f)
+                url = d.get('file_info', {}).get('update_url') or fallback_url
+                if url:
+                    self._record_list_result(url, False, msg, 0)
+            except Exception:
+                pass
+            return msg
 
     def load_user_entries(self):
         if not os.path.exists(self.userlist_path): return
