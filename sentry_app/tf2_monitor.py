@@ -18,14 +18,24 @@ class TF2Monitor:
 
     @staticmethod
     def detect_steamid_from_process():
+        # Prefer Steam.exe over steamwebhelper.exe. Since the 2023 Steam CEF
+        # rewrite, steamwebhelper.exe lives at <install>/bin/cef/cef.win64/ on
+        # Windows (and the process_iter order isn't guaranteed), so picking the
+        # first match almost always grabs a deep path whose parent dir has no
+        # config/loginusers.vdf. Steam.exe always sits directly in the install
+        # root next to config/.
         steam_exe = None
-        target_names = {"steam", "steamwebhelper"}
-
         for proc in psutil.process_iter(['name', 'exe']):
             try:
-                name = proc.info.get('name')
+                name = (proc.info.get('name') or '').lower()
                 exe = proc.info.get('exe')
-                if name and exe and name.lower() in target_names:
+                # Strip ".exe" because psutil on Windows returns names with
+                # the extension (steam.exe) but on Linux/Mac returns bare names
+                # (steam). The original code's "name in {steam, steamwebhelper}"
+                # check never matched anything on a default Windows psutil.
+                if name.endswith('.exe'):
+                    name = name[:-4]
+                if name == 'steam' and exe:
                     steam_exe = os.path.abspath(exe)
                     break
             except (psutil.NoSuchProcess, psutil.AccessDenied):
@@ -34,15 +44,21 @@ class TF2Monitor:
         if not steam_exe:
             return None
 
-        exe_dir = os.path.dirname(steam_exe)
+        # Walk up the directory tree to find config/loginusers.vdf.
+        # - Windows: <install>/Steam.exe  -> config/ is alongside it
+        # - Steam Play / Proton: <install>/ubuntu12_32/steam -> config/ is one level up
+        search = os.path.dirname(steam_exe)
+        config_path = None
+        for _ in range(4):
+            if not search or search == os.path.dirname(search):
+                break
+            candidate = os.path.join(search, 'config', 'loginusers.vdf')
+            if os.path.exists(candidate):
+                config_path = candidate
+                break
+            search = os.path.dirname(search)
 
-        if os.path.basename(exe_dir) == "ubuntu12_32":
-            steam_root = os.path.dirname(exe_dir)
-        else:
-            steam_root = exe_dir
-
-        config_path = os.path.join(steam_root, "config", "loginusers.vdf")
-        if not os.path.exists(config_path):
+        if not config_path:
             return None
 
         users = {}
@@ -80,6 +96,21 @@ class TF2Monitor:
             if info.get("MostRecent", "0") == "1":
                 found_sid64 = sid
                 break
+
+        # Fallback: pick the user with the most recent Timestamp. Some Steam
+        # installs never write the "MostRecent" field (esp. when the user was
+        # last logged in via a launcher shortcut rather than the Steam client),
+        # so without this fallback detection always returns None.
+        if not found_sid64:
+            best_ts = -1
+            for sid, info in users.items():
+                try:
+                    ts = int(info.get("Timestamp", "0"))
+                except (TypeError, ValueError):
+                    ts = 0
+                if ts > best_ts:
+                    best_ts = ts
+                    found_sid64 = sid
 
         if found_sid64:
             return convert_steamid64_to_steamid3(found_sid64)
