@@ -163,14 +163,31 @@ class UserListWindow(BaseAuxWindow):
         btn_layout = QHBoxLayout()
         export_btn = QPushButton("Export list to TF2BD format")
         export_btn.clicked.connect(self.export_list)
+        download_btn = QPushButton("Download/Update TF2BD Lists")
+        download_btn.setToolTip(
+            "Fetch the default TF2BD community list if tf2bd_lists/ is empty,\n"
+            "and refresh any existing lists via their embedded update_url."
+        )
+        download_btn.clicked.connect(self.download_lists)
         close_btn = QPushButton("Close")
         close_btn.clicked.connect(self.close)
 
         btn_layout.addWidget(export_btn)
+        btn_layout.addWidget(download_btn)
         btn_layout.addStretch()
         btn_layout.addWidget(close_btn)
         self.layout.addLayout(btn_layout)
 
+        self.refresh()
+
+    def download_lists(self):
+        from .ui_qt_dialogs import custom_popup
+        result = self.logic.lists.force_update_now()
+        custom_popup(
+            self, self.px,
+            "TF2BD List Update",
+            result if result else "No changes."
+        )
         self.refresh()
 
     def on_double_click(self, row, col):

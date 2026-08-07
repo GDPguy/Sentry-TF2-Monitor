@@ -1,7 +1,11 @@
+import os
+import sys
 from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel,
                                QLineEdit, QCheckBox, QSpinBox, QDoubleSpinBox,
                                QPushButton, QGroupBox, QScrollArea,
-                               QWidget, QColorDialog, QFormLayout, QGridLayout)
+                               QWidget, QColorDialog, QFormLayout, QGridLayout,
+                               QTableWidget, QTableWidgetItem, QHeaderView,
+                               QAbstractItemView)
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QIntValidator, QColor
 
@@ -107,11 +111,72 @@ class SettingsWindow(QDialog):
 
         lay_ext.addRow("SteamHistory API Key:", hb_api)
 
-        self.vars['Auto_Update_TF2BD_Lists'] = QCheckBox("Auto-update TF2BD lists on startup")
+        self.vars['Auto_Update_TF2BD_Lists'] = QCheckBox("Auto-update enabled lists on startup")
         self.vars['Auto_Update_TF2BD_Lists'].setChecked(self.logic.get_setting_bool("Auto_Update_TF2BD_Lists"))
         lay_ext.addRow(self.vars['Auto_Update_TF2BD_Lists'])
 
         self.form_layout.addWidget(grp_ext)
+
+        # ---- TF2BD Player Lists ----
+        grp_lists = QGroupBox("TF2BD Player Lists")
+        lay_lists = QVBoxLayout(grp_lists)
+        lay_lists.setContentsMargins(8, 8, 8, 8)
+
+        lbl_lists_help = QLabel(
+            "Pick which cheater / suspicious-player lists to load. Built-in lists "
+            "update automatically when the upstream repo changes; custom URLs are "
+            "downloaded once and then refreshed via their embedded update_url.\n"
+            "Files are saved under <code>tf2bd_lists/</code> next to Sentry.exe."
+        )
+        lbl_lists_help.setWordWrap(True)
+        lbl_lists_help.setStyleSheet("color: gray;")
+        lay_lists.addWidget(lbl_lists_help)
+
+        # Table of lists: Name | Players | Enabled | Auto-update | Last Status | URL
+        self.lists_table = QTableWidget(0, 6)
+        self.lists_table.setHorizontalHeaderLabels(
+            ['Name', 'Players', 'Enabled', 'Auto-Update', 'Last Status', 'URL']
+        )
+        self.lists_table.verticalHeader().setVisible(False)
+        self.lists_table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.lists_table.setSelectionMode(QAbstractItemView.SingleSelection)
+        self.lists_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        hdr = self.lists_table.horizontalHeader()
+        hdr.setSectionResizeMode(0, QHeaderView.Interactive)
+        hdr.setSectionResizeMode(1, QHeaderView.ResizeToContents)
+        hdr.setSectionResizeMode(2, QHeaderView.ResizeToContents)
+        hdr.setSectionResizeMode(3, QHeaderView.ResizeToContents)
+        hdr.setSectionResizeMode(4, QHeaderView.Interactive)
+        hdr.setSectionResizeMode(5, QHeaderView.Stretch)
+        self.lists_table.setColumnWidth(0, self.px(180))
+        self.lists_table.setColumnWidth(4, self.px(220))
+        self.lists_table.verticalHeader().setDefaultSectionSize(self.px(22))
+        lay_lists.addWidget(self.lists_table)
+
+        lists_btn_row = QHBoxLayout()
+        self.btn_lists_add = QPushButton("Add Custom URL...")
+        self.btn_lists_add.clicked.connect(self.lists_add_custom)
+        self.btn_lists_remove = QPushButton("Remove Selected")
+        self.btn_lists_remove.clicked.connect(self.lists_remove_selected)
+        self.btn_lists_update = QPushButton("Update All Now")
+        self.btn_lists_update.clicked.connect(self.lists_update_now)
+        self.btn_lists_open = QPushButton("Open tf2bd_lists/ Folder")
+        self.btn_lists_open.clicked.connect(self.lists_open_folder)
+        lists_btn_row.addWidget(self.btn_lists_add)
+        lists_btn_row.addWidget(self.btn_lists_remove)
+        lists_btn_row.addWidget(self.btn_lists_update)
+        lists_btn_row.addStretch()
+        lists_btn_row.addWidget(self.btn_lists_open)
+        lay_lists.addLayout(lists_btn_row)
+
+        self.lists_status_label = QLabel("")
+        self.lists_status_label.setWordWrap(True)
+        self.lists_status_label.setStyleSheet("color: gray; font-style: italic;")
+        lay_lists.addWidget(self.lists_status_label)
+
+        self.form_layout.addWidget(grp_lists)
+
+        # ---- end TF2BD Player Lists ----
 
         grp_auto = QGroupBox("Automation")
         lay_auto = QGridLayout(grp_auto)
@@ -230,6 +295,10 @@ class SettingsWindow(QDialog):
         lay_app.addRow(color_grid)
         self.form_layout.addWidget(grp_app)
 
+        # Populate the TF2BD lists table with whatever's currently
+        # configured, then wire up its checkbox toggles.
+        self.refresh_lists_table()
+
         action_layout = QHBoxLayout()
         action_layout.addStretch()
         btn_cancel = QPushButton("Cancel")
@@ -280,6 +349,175 @@ class SettingsWindow(QDialog):
         hex_c = DEFAULT_SETTINGS[key]
         self.color_vars[key] = hex_c
         self.color_widgets[key].setStyleSheet(f"background-color: {hex_c}; border: 1px solid black;")
+
+    # ---- TF2BD lists table handlers ----
+
+    def refresh_lists_table(self):
+        """Re-render the lists table from ListManager.lists_config. Disables
+        cell editing on the Name/URL/Players/Last Status columns and wires
+        the Enabled/Auto-Update cells back to the manager on toggle."""
+        from .ui_qt_dialogs import custom_askstring
+        self._custom_askstring = custom_askstring  # keep ref alive
+
+        # Avoid firing itemChanged during rebuild
+        self.lists_table.blockSignals(True)
+        try:
+            self.lists_table.setRowCount(0)
+            entries = self.logic.lists.get_lists()
+            for entry in entries:
+                row = self.lists_table.rowCount()
+                self.lists_table.insertRow(row)
+
+                # Name
+                name_item = QTableWidgetItem(entry.get('name', ''))
+                if entry.get('is_builtin'):
+                    name_item.setData(Qt.UserRole, entry['url'])
+                    suffix = '  (built-in)'
+                    name_item.setText(entry.get('name', '') + suffix)
+                    name_item.setForeground(Qt.gray)
+                else:
+                    name_item.setData(Qt.UserRole, entry['url'])
+                self.lists_table.setItem(row, 0, name_item)
+
+                # Players
+                pc = entry.get('last_player_count', 0)
+                pc_text = str(pc) if pc else '—'
+                pc_item = QTableWidgetItem(pc_text)
+                pc_item.setTextAlignment(Qt.AlignCenter)
+                self.lists_table.setItem(row, 1, pc_item)
+
+                # Enabled
+                en_chk = QCheckBox()
+                en_chk.setChecked(bool(entry.get('enabled', True)))
+                en_chk.toggled.connect(
+                    lambda checked, url=entry['url']: self._on_list_enabled_toggled(url, checked)
+                )
+                self.lists_table.setCellWidget(row, 2, en_chk)
+
+                # Auto-update
+                au_chk = QCheckBox()
+                au_chk.setChecked(bool(entry.get('auto_update', True)))
+                au_chk.toggled.connect(
+                    lambda checked, url=entry['url']: self._on_list_autoupdate_toggled(url, checked)
+                )
+                self.lists_table.setCellWidget(row, 3, au_chk)
+
+                # Last status
+                status_item = QTableWidgetItem(entry.get('last_status', '') or '—')
+                status_item.setToolTip(status_item.text())
+                self.lists_table.setItem(row, 4, status_item)
+
+                # URL
+                url_item = QTableWidgetItem(entry.get('url', ''))
+                url_item.setToolTip(entry.get('url', ''))
+                self.lists_table.setItem(row, 5, url_item)
+        finally:
+            self.lists_table.blockSignals(False)
+
+        # Show last update status as the group caption's helper text.
+        last = self.logic.lists.last_update_status
+        if last:
+            self.lists_status_label.setText(f"Last update: {last}")
+        else:
+            self.lists_status_label.setText("")
+
+    def _on_list_enabled_toggled(self, url, checked):
+        self.logic.lists.set_list_enabled(url, checked)
+
+    def _on_list_autoupdate_toggled(self, url, checked):
+        self.logic.lists.set_list_auto_update(url, checked)
+
+    def lists_add_custom(self):
+        from .ui_qt_dialogs import custom_askstring
+        url = custom_askstring(
+            self, self.px,
+            "Add Custom TF2BD List",
+            "Paste the URL of a TF2BD-format JSON list:",
+            "https://"
+        )
+        if not url:
+            return
+        url = url.strip()
+        if not (url.startswith('http://') or url.startswith('https://')):
+            from .ui_qt_dialogs import custom_popup
+            custom_popup(self, self.px, "Invalid URL",
+                         "URL must start with http:// or https://")
+            return
+        # Derive a default name from the URL basename
+        from urllib.parse import urlparse
+        path_basename = os.path.basename(urlparse(url).path.rstrip('/')) or 'custom'
+        default_name = path_basename.replace('.json', '').replace('playerlist.', '')
+        from .ui_qt_dialogs import custom_askstring
+        name = custom_askstring(
+            self, self.px,
+            "List Name",
+            "Display name for this list:",
+            default_name.capitalize() + " List"
+        )
+        if not name:
+            return
+
+        ok = self.logic.lists.add_custom_list(name.strip(), url)
+        if not ok:
+            from .ui_qt_dialogs import custom_popup
+            custom_popup(self, self.px, "Already Exists",
+                         "A list with that URL is already configured.")
+            return
+        self.refresh_lists_table()
+
+    def lists_remove_selected(self):
+        row = self.lists_table.currentRow()
+        if row < 0:
+            return
+        url = self.lists_table.item(row, 0).data(Qt.UserRole)
+        entry = next((e for e in self.logic.lists.get_lists() if e.get('url') == url), None)
+        if not entry:
+            return
+        if entry.get('is_builtin'):
+            from .ui_qt_dialogs import custom_popup
+            custom_popup(
+                self, self.px, "Built-in List",
+                "Built-in lists cannot be removed. Disable it instead "
+                "(uncheck the Enabled column) and it won't be loaded."
+            )
+            return
+        from .ui_qt_dialogs import custom_popup
+        if custom_popup(
+            self, self.px, "Remove List?",
+            f"Remove '{entry.get('name')}' and delete its file from "
+            "tf2bd_lists/?",
+            is_confirmation=True,
+        ):
+            self.logic.lists.remove_list(url)
+            self.refresh_lists_table()
+
+    def lists_update_now(self):
+        from .ui_qt_dialogs import custom_popup
+        result = self.logic.lists.force_update_now()
+        self.refresh_lists_table()
+        custom_popup(
+            self, self.px,
+            "TF2BD List Update",
+            result if result else "No changes."
+        )
+
+    def lists_open_folder(self):
+        import subprocess
+        # The tf2bd_lists/ directory sits at the working directory the
+        # binary was launched from, which for a --onefile PyInstaller build
+        # is the directory containing Sentry.exe. Resolve relative to that.
+        exe_dir = os.path.dirname(os.path.abspath(sys.executable)) if getattr(sys, 'frozen', False) \
+            else os.getcwd()
+        folder = os.path.join(exe_dir, 'tf2bd_lists')
+        try:
+            os.makedirs(folder, exist_ok=True)
+            subprocess.Popen(['explorer', folder])
+        except Exception as e:
+            from .ui_qt_dialogs import custom_popup
+            custom_popup(self, self.px, "Error",
+                         f"Could not open folder:\n{e}")
+
+    # ---- end TF2BD lists table handlers ----
 
     def save_all(self):
         for key, widget in self.vars.items():
