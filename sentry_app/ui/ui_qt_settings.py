@@ -38,6 +38,18 @@ class SettingsWindow(QDialog):
         grp_conn = QGroupBox("Connection / Identity")
         lay_conn = QFormLayout(grp_conn)
 
+        self.vars['RCon_Address'] = QLineEdit(self.logic.get_setting('RCon_Address'))
+        self.vars['RCon_Address'].setMaxLength(64)
+
+        btn_detect_rcon = QPushButton("Auto-detect")
+        btn_detect_rcon.setFixedWidth(self.px(110))
+        btn_detect_rcon.clicked.connect(self.auto_detect_rcon)
+
+        hb_addr = QHBoxLayout()
+        hb_addr.addWidget(self.vars['RCon_Address'])
+        hb_addr.addWidget(btn_detect_rcon)
+        lay_conn.addRow("RCon Address:", hb_addr)
+
         self.vars['RCon_Password'] = QLineEdit(self.logic.get_setting('RCon_Password'))
         self.vars['RCon_Password'].setEchoMode(QLineEdit.Password)
         self.vars['RCon_Password'].setMaxLength(128)
@@ -258,6 +270,27 @@ class SettingsWindow(QDialog):
         self.logic.cached_detected_steamid = None
         self.logic.auto_detect_steamid()
         self.update_detection_label()
+
+    def auto_detect_rcon(self):
+        from .ui_qt_dialogs import custom_popup
+        found = self.logic.discover_rcon_host()
+        if found:
+            self.vars['RCon_Address'].setText(found)
+            custom_popup(
+                self, self.px,
+                "RCon Detected",
+                f"Found a TF2 RCON listener at {found}.\n\n"
+                f"This has been written to the RCon Address field. "
+                f"Click Save Settings to apply."
+            )
+        else:
+            custom_popup(
+                self, self.px,
+                "RCon Not Found",
+                "Could not find a TF2 RCON listener on any local IP.\n\n"
+                "Make sure TF2 is running with -usercon +net_start, "
+                "and that your RCon Port matches."
+            )
 
     def update_detection_label(self):
         val = self.logic.cached_detected_steamid
