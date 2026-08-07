@@ -80,8 +80,16 @@ class AppLogic:
         new_val = str(v)
         if current != new_val:
             self.cfg.set(k, new_val)
-            if k in ('RCon_Password', 'RCon_Port'):
+            if k in ('RCon_Address', 'RCon_Password', 'RCon_Port'):
                 self.rcon.reset()
+
+    def discover_rcon_host(self) -> str | None:
+        """Probe all local IPs for a TF2 RCON listener. Returns the IP
+        string if found, else None. Used by the Settings dialog's
+        Auto-detect button."""
+        port = self.get_setting_int('RCon_Port')
+        pw = self.get_setting('RCon_Password')
+        return RConManager.discover_host(port, pw)
 
     def auto_detect_steamid(self):
         sid = TF2Monitor.detect_steamid_from_process()
