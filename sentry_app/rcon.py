@@ -154,6 +154,9 @@ class RConManager:
         Returns the IP as a string, or None if no RCON listener was found.
         Safe to call from the UI thread - uses short per-host timeouts.
         """
+        #TF2 rcon, if PW is blank rcon is effectively disabled anyway
+        if not password:
+            return None
         candidates = ["127.0.0.1"]
         try:
             for fam, _, _, _, sockaddr in socket.getaddrinfo(
