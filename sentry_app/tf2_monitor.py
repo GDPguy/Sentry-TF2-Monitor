@@ -18,21 +18,11 @@ class TF2Monitor:
 
     @staticmethod
     def detect_steamid_from_process():
-        # Prefer Steam.exe over steamwebhelper.exe. Since the 2023 Steam CEF
-        # rewrite, steamwebhelper.exe lives at <install>/bin/cef/cef.win64/ on
-        # Windows (and the process_iter order isn't guaranteed), so picking the
-        # first match almost always grabs a deep path whose parent dir has no
-        # config/loginusers.vdf. Steam.exe always sits directly in the install
-        # root next to config/.
         steam_exe = None
         for proc in psutil.process_iter(['name', 'exe']):
             try:
                 name = (proc.info.get('name') or '').lower()
                 exe = proc.info.get('exe')
-                # Strip ".exe" because psutil on Windows returns names with
-                # the extension (steam.exe) but on Linux/Mac returns bare names
-                # (steam). The original code's "name in {steam, steamwebhelper}"
-                # check never matched anything on a default Windows psutil.
                 if name.endswith('.exe'):
                     name = name[:-4]
                 if name == 'steam' and exe:
@@ -44,9 +34,6 @@ class TF2Monitor:
         if not steam_exe:
             return None
 
-        # Walk up the directory tree to find config/loginusers.vdf.
-        # - Windows: <install>/Steam.exe  -> config/ is alongside it
-        # - Steam Play / Proton: <install>/ubuntu12_32/steam -> config/ is one level up
         search = os.path.dirname(steam_exe)
         config_path = None
         for _ in range(4):
@@ -97,10 +84,6 @@ class TF2Monitor:
                 found_sid64 = sid
                 break
 
-        # Fallback: pick the user with the most recent Timestamp. Some Steam
-        # installs never write the "MostRecent" field (esp. when the user was
-        # last logged in via a launcher shortcut rather than the Steam client),
-        # so without this fallback detection always returns None.
         if not found_sid64:
             best_ts = -1
             for sid, info in users.items():
