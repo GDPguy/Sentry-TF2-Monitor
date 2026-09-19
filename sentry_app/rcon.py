@@ -78,21 +78,22 @@ class RConManager:
         self.block_reason = None
 
     def _get_creds(self):
+        host = self.cfg.get("RCon_Address").strip() or "127.0.0.1"
         port = self.cfg.get_int("RCon_Port")
         pw = self.cfg.get("RCon_Password")
         if not (1 <= port <= 65535):
             port = 27015
-        return port, pw
+        return host, port, pw
 
     def execute(self, command: str) -> tuple[bool, str]:
-        port, pw = self._get_creds()
+        host, port, pw = self._get_creds()
 
         with self.lock:
             if self.block_reason:
                 return False, ""
 
             try:
-                with RconConnection("127.0.0.1", port, pw) as conn:
+                with RconConnection(host, port, pw) as conn:
 
                     conn.sock.sendall(pack_rcon_packet(ID_COMMAND_REAL, SERVERDATA_EXECCOMMAND, command))
                     conn.sock.sendall(pack_rcon_packet(ID_COMMAND_MARKER, SERVERDATA_EXECCOMMAND, ""))
@@ -139,3 +140,76 @@ class RConManager:
     def reset(self):
         with self.lock:
             self.block_reason = None
+
+    @staticmethod
+    def discover_host(port: int, password: str = "") -> str | None:
+        """Scan local interface IPs for a Source RCON listener.
+
+        TF2's usercon binds to whatever interface Windows routing picks as
+        "best" (GetBestInterface), which on multi-NIC machines is often NOT
+        127.0.0.1. This scans all local IPv4 addresses and returns the first
+        one that responds to a Source RCON auth probe (any valid RCON
+        response, regardless of password correctness).
+
+        Returns the IP as a string, or None if no RCON listener was found.
+        Safe to call from the UI thread - uses short per-host timeouts.
+        """
+        candidates = ["127.0.0.1"]
+        try:
+            for fam, _, _, _, sockaddr in socket.getaddrinfo(
+                host="", port=0, family=socket.AF_INET, type=socket.SOCK_DGRAM
+            ):
+                ip = sockaddr[0]
+                if ip and ip not in candidates:
+                    candidates.append(ip)
+        except (socket.gaierror, OSError):
+            pass
+
+        probe_body_str = password or ""
+        probe_pkt = pack_rcon_packet(12345, SERVERDATA_AUTH, probe_body_str) if probe_body_str else None
+
+        for ip in candidates:
+            sock = None
+            try:
+                sock = socket.create_connection((ip, port), timeout=1.0)
+                sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+
+                if probe_pkt:
+                    sock.sendall(probe_pkt)
+                    sock.settimeout(1.0)
+                    size_b = b""
+                    while len(size_b) < 4:
+                        chunk = sock.recv(4 - len(size_b))
+                        if not chunk:
+                            break
+                        size_b += chunk
+                    if len(size_b) < 4:
+                        continue
+                    pkt_size = struct.unpack("<i", size_b)[0]
+                    if pkt_size <= 0 or pkt_size > 4096:
+                        continue
+                    payload = b""
+                    while len(payload) < pkt_size:
+                        chunk = sock.recv(pkt_size - len(payload))
+                        if not chunk:
+                            break
+                        payload += chunk
+                    if len(payload) < 8:
+                        continue
+                    _req_id, ptype = struct.unpack("<ii", payload[:8])
+                    # Source RCON response types are 0 (RESPONSE_VALUE) or 2
+                    # (AUTH_RESPONSE / EXECCOMMAND). Anything else and we
+                    # probably hit a different service on the same port.
+                    if ptype not in (SERVERDATA_RESPONSE_VALUE, SERVERDATA_AUTH_RESPONSE):
+                        continue
+                return ip
+            except (OSError, socket.timeout):
+                continue
+            finally:
+                if sock is not None:
+                    try:
+                        sock.close()
+                    except Exception:
+                        pass
+
+        return None

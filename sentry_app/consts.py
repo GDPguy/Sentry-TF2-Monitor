@@ -3,6 +3,7 @@ APP_VERSION = "1.2.0"
 DEFAULT_SETTINGS = {
     'User': '[U:1:XXXXXXXXXX]',
     'Use_Manual_SteamID': 'False',
+    'RCon_Address': '127.0.0.1',
     'RCon_Password': 'yourpassword',
     'RCon_Port': '27015',
     'Steam_API_Key': '',
