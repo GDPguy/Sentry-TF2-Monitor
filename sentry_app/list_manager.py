@@ -352,12 +352,6 @@ class ListManager:
         return ''
 
     def set_list_enabled(self, filename, enabled):
-        """Save whether this list should be loaded on the next app start.
-
-        TF2BD player data is intentionally not hot-reloaded while Sentry is
-        running. This keeps the active detection snapshot stable for the whole
-        process lifetime.
-        """
         i = self._find_list_index(filename)
         if i < 0:
             return False
@@ -691,7 +685,7 @@ class ListManager:
         return f"Downloaded {filename} ({n_players} players)"
 
     def force_update_list(self, filename):
-        """Update one configured list without hot-reloading TF2BD player data.
+        """Update one configured list
 
         This is an explicit per-list force update: Enabled and Updates Enabled
         are ignored. The list only needs a valid Update URL. Missing files are
@@ -724,7 +718,7 @@ class ListManager:
         return self.last_update_status
 
     def force_update_now(self):
-        """Update configured list files on disk without hot-reloading data.
+        """Update configured list files on disk
 
         Manual updates only touch lists where both Enabled and Updates Enabled
         are selected. The running process keeps its existing TF2BD player snapshot;
