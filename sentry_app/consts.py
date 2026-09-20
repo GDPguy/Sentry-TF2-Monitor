@@ -8,7 +8,7 @@ DEFAULT_SETTINGS = {
     'RCon_Port': '27015',
     'Steam_API_Key': '',
     'SteamHistory_API_Key': '',
-    'Auto_Update_TF2BD_Lists': 'False',
+    'Auto_Update_TF2BD_Lists': 'True',
     'Kick_Cheaters': 'False',
     'Announce_Cheaters': 'False',
     'Announce_Cheaters_Interval': '15',
