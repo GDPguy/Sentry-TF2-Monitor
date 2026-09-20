@@ -44,3 +44,31 @@ def convert_steamid3_to_steamid64(steamid3):
         except ValueError:
             return None
     return None
+
+def restart_application() -> bool:
+    """Launch a replacement Sentry process, then close this one normally."""
+    import sys
+    from PySide6.QtCore import QProcess
+    from PySide6.QtWidgets import QApplication
+
+    cwd = os.getcwd()
+
+    is_compiled = bool(getattr(sys, "frozen", False) or "__compiled__" in globals())
+
+    if is_compiled:
+        program = sys.executable
+        args = list(sys.argv[1:])
+    else:
+        program = sys.executable
+        script = os.path.abspath(sys.argv[0])
+        args = [script, *sys.argv[1:]]
+
+    result = QProcess.startDetached(program, args, cwd)
+    started = result[0] if isinstance(result, tuple) else bool(result)
+    if not started:
+        return False
+
+    app = QApplication.instance()
+    if app is not None:
+        app.closeAllWindows()
+    return True
