@@ -6,8 +6,22 @@ from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QIntValidator, QColor
 
 from ..consts import DEFAULT_SETTINGS
+from ..utils import restart_application
 
 class SettingsWindow(QDialog):
+    RESTART_REQUIRED_SETTINGS = {
+        'UI_Scale',
+        'Show_SteamID_Column',
+        'Show_Ping_Column',
+        'Show_Kills_Column',
+        'Show_Deaths_Column',
+        'Show_Age_Column',
+        'Show_Hours_Column',
+        'Show_VAC_Column',
+        'Show_GameBans_Column',
+        'Show_SB_Column',
+    }
+
     def __init__(self, parent, logic, px_func):
         super().__init__(parent)
         self.logic = logic
@@ -118,10 +132,6 @@ class SettingsWindow(QDialog):
         hb_api.addWidget(btn_show_api)
 
         lay_ext.addRow("SteamHistory API Key:", hb_api)
-
-        self.vars['Auto_Update_TF2BD_Lists'] = QCheckBox("Auto-update TF2BD lists on startup")
-        self.vars['Auto_Update_TF2BD_Lists'].setChecked(self.logic.get_setting_bool("Auto_Update_TF2BD_Lists"))
-        lay_ext.addRow(self.vars['Auto_Update_TF2BD_Lists'])
 
         self.form_layout.addWidget(grp_ext)
 
@@ -258,6 +268,28 @@ class SettingsWindow(QDialog):
         self.det_timer.start(1000)
         self.update_detection_label()
 
+        # Snapshot restart-sensitive controls when the dialog opens. Comparing
+        # against this UI baseline is more reliable than re-reading settings while
+        # Save is in progress, and guarantees the restart prompt appears only when
+        # the user actually changed one of these controls.
+        self._restart_baseline = {
+            key: self._restart_widget_value(key)
+            for key in self.RESTART_REQUIRED_SETTINGS
+            if key in self.vars
+        }
+
+    def _restart_widget_value(self, key):
+        widget = self.vars.get(key)
+        if isinstance(widget, QCheckBox):
+            return bool(widget.isChecked())
+        if isinstance(widget, QDoubleSpinBox):
+            return float(widget.value())
+        if isinstance(widget, QSpinBox):
+            return int(widget.value())
+        if isinstance(widget, QLineEdit):
+            return widget.text()
+        return None
+
     def toggle_echo(self, line_edit, btn):
         if line_edit.echoMode() == QLineEdit.Password:
             line_edit.setEchoMode(QLineEdit.Normal)
@@ -298,7 +330,7 @@ class SettingsWindow(QDialog):
                 "RCon Not Found",
                 "Could not find a TF2 RCON listener on any local IP.\n\n"
                 "Make sure TF2 is running with -usercon +net_start, "
-                "and that your RCon Port matches."
+                "and that your RCon Port and password match."
             )
 
     def update_detection_label(self):
@@ -324,14 +356,54 @@ class SettingsWindow(QDialog):
         self.color_widgets[key].setStyleSheet(f"background-color: {hex_c}; border: 1px solid black;")
 
     def save_all(self):
+        restart_needed = any(
+            self._restart_widget_value(key) != self._restart_baseline.get(key)
+            for key in self._restart_baseline
+        )
+
         for key, widget in self.vars.items():
             val = None
-            if isinstance(widget, QLineEdit): val = widget.text()
-            elif isinstance(widget, QCheckBox): val = str(widget.isChecked())
-            elif isinstance(widget, (QSpinBox, QDoubleSpinBox)): val = str(widget.value())
-            if val is not None: self.logic.set_setting(key, val)
+            if isinstance(widget, QLineEdit):
+                val = widget.text()
+            elif isinstance(widget, QCheckBox):
+                val = str(widget.isChecked())
+            elif isinstance(widget, (QSpinBox, QDoubleSpinBox)):
+                val = str(widget.value())
+
+            if val is None:
+                continue
+
+            self.logic.set_setting(key, val)
 
         for key, val in self.color_vars.items():
             self.logic.set_setting(key, val)
 
+        restart_now = False
+        if restart_needed:
+            from .ui_qt_dialogs import custom_popup
+            restart_now = custom_popup(
+                self,
+                self.px,
+                "Restart Required",
+                "The settings you changed require Sentry to restart.\n\n"
+                "Restart Sentry now?",
+                is_confirmation=True,
+            )
+
+        parent = self.parentWidget()
         self.accept()
+
+        if restart_now:
+            def do_restart():
+                if restart_application():
+                    return
+                from .ui_qt_dialogs import custom_popup
+                custom_popup(
+                    parent,
+                    self.px,
+                    "Restart Failed",
+                    "Sentry could not start a replacement process. Your settings are saved "
+                    "and will apply the next time you start Sentry.",
+                )
+
+            QTimer.singleShot(0, do_restart)
