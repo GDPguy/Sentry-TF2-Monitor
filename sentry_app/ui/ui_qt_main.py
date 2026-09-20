@@ -127,10 +127,13 @@ class MainWindow(DeselectableWindowMixin, QMainWindow):
         btn_recent.clicked.connect(self.open_recent)
         btn_users = QPushButton("User List")
         btn_users.clicked.connect(self.open_userlist)
+        btn_tf2bd = QPushButton("TF2BD Lists")
+        btn_tf2bd.clicked.connect(self.open_tf2bd_lists)
 
         top_bar.addWidget(btn_settings)
         top_bar.addWidget(btn_recent)
         top_bar.addWidget(btn_users)
+        top_bar.addWidget(btn_tf2bd)
 
         self.lbl_status = QLabel("Initializing...")
         self.lbl_status.setAlignment(Qt.AlignCenter)
@@ -346,6 +349,9 @@ class MainWindow(DeselectableWindowMixin, QMainWindow):
     def open_settings(self): SettingsWindow(self, self.logic, self.px).exec()
     def open_userlist(self): UserListWindow(self, self.logic, self.px).exec()
     def open_recent(self): RecentPlayersWindow(self, self.logic, self.px).exec()
+    def open_tf2bd_lists(self):
+        from .ui_qt_tf2bd_lists import TF2BDListManagerWindow
+        TF2BDListManagerWindow(self, self.logic, self.px).exec()
 
     def tick_update_data(self):
         if not self.is_fetching and not self.is_closing:
@@ -389,6 +395,8 @@ class MainWindow(DeselectableWindowMixin, QMainWindow):
         color = "darkcyan"
         text = ""
 
+        # steamid_status_msg will not show for connection_failed and auth_failed cases; gui only has enough room for two lines
+        # cant be bothered to fix atm
         if status == 'tf2_closed':
             text = "Waiting for TF2 to launch" + steamid_status_msg
             self.clear_tables()
@@ -397,16 +405,14 @@ class MainWindow(DeselectableWindowMixin, QMainWindow):
             color = "green"
             self.clear_tables()
         elif status == 'connection_failed':
-            text = (
-                "TF2 Found but RCon is unreachable. If this persists, check launch options/settings" + steamid_status_msg
-            )
+            text = "TF2 found but RCon is currently unreachable\nIf this persists, check settings > RCon Address" + steamid_status_msg
             color = "orange"
         elif status == 'banned':
             text = "RCON Banned, restart TF2 (ignore if TF2 is closing)" + steamid_status_msg
             color = "red"
             self.clear_tables()
         elif status == 'auth_failed':
-            text = "RCON Error: Wrong Password.\nCheck TF2's launch options & Settings > RCon Password"
+            text = "RCON Error: Wrong Password.\nCheck TF2's launch options & Settings > RCon Password" + steamid_status_msg
             color = "orange"
             self.clear_tables()
         else:
