@@ -79,11 +79,16 @@ class TF2Monitor:
             return None
 
         found_sid64 = None
+
+        # Legacy 
         for sid, info in users.items():
             if info.get("MostRecent", "0") == "1":
                 found_sid64 = sid
                 break
 
+        # current behavior: prio latest timestamp
+        # falls back on first entry if all timestamps are invalid
+        # might consider a best_ts value of 0 instead to ensure no false positives
         if not found_sid64:
             best_ts = -1
             for sid, info in users.items():
