@@ -168,7 +168,7 @@ class ListManager:
                 'enabled': True,
                 'auto_update': bool(url),
                 'last_updated': 0.0,
-                'last_status': 'Existing local list',
+                'last_status': 'Existing local list' if url else 'No update URL',
                 'last_player_count': player_count,
             })
             known.add(fname.lower())
@@ -186,7 +186,8 @@ class ListManager:
     def refresh_lists_from_disk(self):
         """Rescan tf2bd_lists/ and refresh file-derived metadata.
 
-        This never changes the active in-memory TF2BD snapshot.
+        This never changes the active in-memory TF2BD snapshot. Newly discovered
+        files are registered for the next Sentry start.
         """
         added_count = self._sync_config_with_existing_files()
         metadata_changed = False
@@ -213,8 +214,21 @@ class ListManager:
                 if entry.get('last_player_count', 0) != count:
                     entry['last_player_count'] = count
                     metadata_changed = True
-                if entry.get('last_status') == 'File missing':
-                    entry['last_status'] = 'Existing local list'
+
+                # Current list state takes precedence over stale update results.
+                # A missing file is handled above; once present again, a disabled
+                # updater should not keep showing an old 404 forever.
+                if not entry.get('url'):
+                    desired_status = 'No update URL'
+                elif not entry.get('auto_update', True):
+                    desired_status = 'Updates disabled'
+                elif entry.get('last_status') == 'File missing':
+                    desired_status = 'Existing local list'
+                else:
+                    desired_status = entry.get('last_status', '')
+
+                if entry.get('last_status') != desired_status:
+                    entry['last_status'] = desired_status
                     metadata_changed = True
             except Exception:
                 continue
@@ -338,6 +352,12 @@ class ListManager:
         return ''
 
     def set_list_enabled(self, filename, enabled):
+        """Save whether this list should be loaded on the next app start.
+
+        TF2BD player data is intentionally not hot-reloaded while Sentry is
+        running. This keeps the active detection snapshot stable for the whole
+        process lifetime.
+        """
         i = self._find_list_index(filename)
         if i < 0:
             return False
@@ -351,13 +371,27 @@ class ListManager:
         if i < 0:
             return False
         entry = self.lists_config[i]
+        fpath = os.path.join(self.tf2bd_dir, entry.get('filename', ''))
         if not entry.get('url'):
             entry['auto_update'] = False
+            if not os.path.isfile(fpath):
+                entry['last_status'] = 'File missing'
+                entry['last_player_count'] = 0
+            else:
+                entry['last_status'] = 'No update URL'
             self._save_lists_config()
             return not bool(auto_update)
         if not entry.get('enabled', True):
             return False
+
         entry['auto_update'] = bool(auto_update)
+        if not os.path.isfile(fpath):
+            entry['last_status'] = 'File missing'
+            entry['last_player_count'] = 0
+        elif auto_update:
+            entry['last_status'] = 'Updates enabled'
+        else:
+            entry['last_status'] = 'Updates disabled'
         self._save_lists_config()
         return True
 
@@ -429,8 +463,15 @@ class ListManager:
         if not url.startswith(('http://', 'https://')):
             self.last_add_error = 'URL must start with http:// or https://.'
             return False
-        if any(entry.get('url') == url for entry in self.lists_config):
-            self.last_add_error = 'That Update URL is already configured.'
+        matching_urls = [entry for entry in self.lists_config if entry.get('url') == url]
+        if matching_urls:
+            if len(matching_urls) == 1:
+                self.last_add_error = 'That Update URL is already configured.'
+            else:
+                self.last_add_error = (
+                    f'That Update URL is already configured for {len(matching_urls)} lists. '
+                    "You probably don't need another copy."
+                )
             return False
 
         filename = self.normalize_custom_filename(
@@ -450,8 +491,19 @@ class ListManager:
             # URL the user pasted. Keep GUI imports from creating another copy of
             # a source that is already configured, while still allowing manually
             # dropped files with duplicate URLs to remain untouched.
-            if any(entry.get('url') == effective_url for entry in self.lists_config):
-                self.last_add_error = 'The list advertises an Update URL that is already configured.'
+            canonical_matches = [
+                entry for entry in self.lists_config if entry.get('url') == effective_url
+            ]
+            if canonical_matches:
+                if len(canonical_matches) == 1:
+                    self.last_add_error = (
+                        'The list advertises an Update URL that is already configured.'
+                    )
+                else:
+                    self.last_add_error = (
+                        'The list advertises an Update URL that is already configured for '
+                        f"{len(canonical_matches)} lists. You probably don\'t need another copy."
+                    )
                 return False
 
             n_players = len(data['players'])
@@ -515,6 +567,10 @@ class ListManager:
 
     def load_tf2bd_data(self):
         self._reload_tf2bd_from_disk()
+        # Reconcile persisted UI metadata before any background updater starts.
+        # This clears stale update errors for lists whose updates are disabled,
+        # while keeping File missing as the higher-priority state.
+        self.refresh_lists_from_disk()
         if self.cfg.get_bool("Auto_Update_TF2BD_Lists"):
             # Set this before starting the thread so the UI cannot slip into the
             # tiny window between thread creation and the worker acquiring its lock.
@@ -536,6 +592,8 @@ class ListManager:
         messages = []
 
         try:
+            # Downloads are serialized, but the active TF2BD snapshot is deliberately
+            # left alone. Newly downloaded data is used on the next Sentry start.
             with self._update_lock:
                 try:
                     messages.extend(self.update_tf2bd_lists(respect_auto_update=True))
@@ -546,7 +604,11 @@ class ListManager:
             if not messages:
                 messages.append("No lists selected for automatic updates.")
             self.last_update_status = " | ".join(m for m in messages if m)
-            print(f"[Auto-Update] {self.last_update_status}")
+            # Print each result once. The previous flow printed individual update
+            # lines and then printed the same messages again as one giant summary.
+            for message in messages:
+                if message:
+                    print(f"[Auto-Update] {message}")
         finally:
             # Clear this only after all startup update/config work has completed.
             # A manager window waiting on this flag can now safely rescan disk.
@@ -629,6 +691,12 @@ class ListManager:
         return f"Downloaded {filename} ({n_players} players)"
 
     def force_update_list(self, filename):
+        """Update one configured list without hot-reloading TF2BD player data.
+
+        This is an explicit per-list force update: Enabled and Updates Enabled
+        are ignored. The list only needs a valid Update URL. Missing files are
+        downloaded; existing files are refreshed.
+        """
         self.last_update_changed_data = False
 
         i = self._find_list_index(filename)
@@ -656,6 +724,12 @@ class ListManager:
         return self.last_update_status
 
     def force_update_now(self):
+        """Update configured list files on disk without hot-reloading data.
+
+        Manual updates only touch lists where both Enabled and Updates Enabled
+        are selected. The running process keeps its existing TF2BD player snapshot;
+        changed files take effect after a Sentry restart.
+        """
         messages = []
         self.last_update_changed_data = False
 
@@ -702,16 +776,21 @@ class ListManager:
             self.tf2bd_suspicious = new_suspicious
             self.tf2bd_error = error_msg
 
+        # This is the stable player-list snapshot used for this process lifetime.
         self._loaded_enabled_files = self._current_enabled_file_set()
         self._loaded_file_signatures = self._current_enabled_file_signatures()
         self._runtime_data_files_changed = False
-
+        # Once the user declines the restart prompt, do not nag again for the
+        # same pending-restart session. This resets automatically if the disk/config
+        # state returns to the currently loaded TF2BD snapshot.
         self._restart_prompt_suppressed = False
 
     def _read_tf2bd_lists(self):
         all_data = {}
         errors = []
 
+        # Only configured + enabled lists participate in detection. Existing
+        # files are imported into lists_config by _sync_config_with_existing_files().
         entries = [
             dict(entry) for entry in self.lists_config
             if entry.get('enabled', True) and entry.get('filename')
@@ -769,7 +848,7 @@ class ListManager:
     def update_tf2bd_lists(self, respect_auto_update=True):
         """Refresh list files from their configured source URLs.
 
-        For now a list must be Enabled and have its per-list update flag selected before
+        A list must be Enabled and have its per-list update flag selected before
         startup or manual bulk updates will touch it.
         """
         messages = []
@@ -791,7 +870,6 @@ class ListManager:
             msg = self._update_json_file(entry)
             if msg:
                 messages.append(msg)
-                print(msg)
         return messages
 
     def _update_json_file(self, entry):
@@ -809,6 +887,9 @@ class ListManager:
                 resp.json(), url, filename
             )
 
+            # Normalize the existing file's update_url before comparing so an
+            # upstream endpoint migration is treated as metadata, not a player
+            # data change.
             metadata_url_changed = False
             if isinstance(data, dict):
                 info = data.get('file_info')
@@ -843,8 +924,6 @@ class ListManager:
                 # Keep the local file's embedded update_url in sync with the
                 # adopted source without treating metadata-only changes as new
                 # player data that requires a restart.
-                # this is a bit overkill, I mean, couldve just left it at a
-                # mismatched signatures
                 atomic_write_bytes(
                     fpath,
                     json.dumps(data, indent=2).encode('utf-8'),
