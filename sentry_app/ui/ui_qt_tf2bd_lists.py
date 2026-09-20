@@ -57,6 +57,8 @@ class TF2BDListManagerWindow(QDialog):
         self._finishing = False
         self._startup_waiting = self.logic.lists.is_startup_update_running()
 
+        # Never rescan/edit list config while the startup updater is still writing
+        # files and statuses. If it is already finished, reconcile immediately.
         discovered_local_lists = 0
         if not self._startup_waiting:
             discovered_local_lists = self.logic.lists.refresh_lists_from_disk()
@@ -372,6 +374,9 @@ class TF2BDListManagerWindow(QDialog):
 
     def _on_auto_update_toggled(self, filename, checked):
         if self.logic.lists.set_list_auto_update(filename, checked):
+            # The table's Last Status reflects current state too (for example,
+            # File missing takes precedence over Updates disabled).
+            self.refresh_table()
             self._set_status(
                 "Updates enabled for this list."
                 if checked else "Updates disabled for this list."
@@ -437,8 +442,6 @@ class TF2BDListManagerWindow(QDialog):
             )
             return
 
-        # Just in case some user has multiple lists with the same update url
-        # and tries to add one via the gui
         matches = [e for e in self.logic.lists.get_lists() if e.get("url") == url]
         if matches:
             if len(matches) == 1:
@@ -448,7 +451,10 @@ class TF2BDListManagerWindow(QDialog):
                     f"'{existing.get('name', existing.get('filename', 'this list'))}'."
                 )
             else:
-                message = f"That Update URL is already configured for {len(matches)} lists."
+                message = (
+                    f"That Update URL is already configured for {len(matches)} lists. "
+                    "You probably don't need another copy."
+                )
             custom_popup(
                 self,
                 self.px,
