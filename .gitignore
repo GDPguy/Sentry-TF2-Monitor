@@ -1,6 +1,7 @@
 __pycache__/
 *.pyc
 cfg/
+venv/
 tf2bd_lists/
 .*.kate-swp
 *.kate-swp
@@ -11,5 +12,8 @@ tf2bd_lists/
 .DS_Store
 Thumbs.db
 settings.ini
+tf2bd_lists.json
+userlist.json
+playerlist.sentry_export.json
 Sentry
 Sentry.exe
