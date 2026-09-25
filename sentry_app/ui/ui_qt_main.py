@@ -131,9 +131,9 @@ class MainWindow(DeselectableWindowMixin, QMainWindow):
         btn_tf2bd.clicked.connect(self.open_tf2bd_lists)
 
         top_bar.addWidget(btn_settings)
-        top_bar.addWidget(btn_recent)
         top_bar.addWidget(btn_users)
         top_bar.addWidget(btn_tf2bd)
+        top_bar.addWidget(btn_recent)
 
         self.lbl_status = QLabel("Initializing...")
         self.lbl_status.setAlignment(Qt.AlignCenter)
