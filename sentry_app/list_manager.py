@@ -36,25 +36,20 @@ class ListManager:
         self.userlist_error = None
         self.tf2bd_error = None
 
-        # Configured TF2BD lists are user-selected sources. Existing JSON files
-        # already present in tf2bd_lists/ are imported into this config so
-        # upgrades do not stop loading lists users already trust.
+
+
+
         self.lists_config = []
         self.last_update_status = ""
-        self.last_update_changed_data = False
+        self.last_update_changed_count = 0
         self.last_add_error = ""
         self._update_lock = threading.Lock()
-        # True from just before the startup updater thread is launched until all
-        # startup list I/O/config writes are finished. The TF2BD manager uses
-        # this to avoid reading/editing list config while that worker is active.
+
+
+
         self._startup_update_running = False
-        self._loaded_enabled_files = set()
         self._loaded_file_signatures = {}
-        self._runtime_data_files_changed = False
-        # Once the user declines the restart prompt, do not nag again for the
-        # same pending-restart session. This resets automatically if the disk/config
-        # state returns to the currently loaded TF2BD snapshot.
-        self._restart_prompt_suppressed = False
+        self._manual_update_changed_files = None
 
         self._ensure_dirs()
         self._load_lists_config()
@@ -70,10 +65,9 @@ class ListManager:
         self.load_tf2bd_data()
         self.load_user_entries()
 
-    # --- TF2BD lists config -------------------------------------------------
+
 
     def _load_lists_config(self):
-        """Load per-list settings and import any existing local list files."""
         try:
             with open(self.lists_config_path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
@@ -117,11 +111,6 @@ class ListManager:
         self._save_lists_config()
 
     def _sync_config_with_existing_files(self):
-        """Add untracked JSON files from tf2bd_lists/ to the managed list UI.
-
-        This preserves the old workflow where users manually dropped trusted
-        TF2BD lists into the folder before per-list configuration existed.
-        """
         known = {
             str(entry.get('filename', '')).lower()
             for entry in self.lists_config
@@ -157,8 +146,8 @@ class ListManager:
                 url = self._extract_list_update_url(data)
                 player_count = len(data['players'])
             except Exception:
-                # Leave malformed JSON for the loader to report rather than
-                # silently registering it as a valid managed list.
+
+
                 continue
 
             self.lists_config.append({
@@ -177,18 +166,12 @@ class ListManager:
         return added_count
 
     def sync_lists_from_disk(self):
-        """Import newly-added local TF2BD JSON files without touching live player data."""
         added_count = self._sync_config_with_existing_files()
         if added_count:
             self._save_lists_config()
         return added_count
 
     def refresh_lists_from_disk(self):
-        """Rescan tf2bd_lists/ and refresh file-derived metadata.
-
-        This never changes the active in-memory TF2BD snapshot. Newly discovered
-        files are registered for the next Sentry start.
-        """
         added_count = self._sync_config_with_existing_files()
         metadata_changed = False
 
@@ -215,9 +198,9 @@ class ListManager:
                     entry['last_player_count'] = count
                     metadata_changed = True
 
-                # Current list state takes precedence over stale update results.
-                # A missing file is handled above; once present again, a disabled
-                # updater should not keep showing an old 404 forever.
+
+
+
                 if not entry.get('url'):
                     desired_status = 'No update URL'
                 elif not entry.get('auto_update', True):
@@ -251,22 +234,7 @@ class ListManager:
     def get_lists(self):
         return [dict(entry) for entry in self.lists_config]
 
-    def _current_enabled_file_set(self):
-        return {
-            str(entry.get('filename', '')).lower()
-            for entry in self.lists_config
-            if entry.get('enabled', True)
-            and entry.get('filename')
-            and os.path.isfile(os.path.join(self.tf2bd_dir, entry.get('filename')))
-        }
-
     def _file_signature(self, fpath):
-        """Return a signature for the player data that affects detection.
-
-        Metadata-only changes such as title/update_url do not require the running
-        process to restart because the active classification snapshot only depends
-        on the players array.
-        """
         try:
             with open(fpath, 'r', encoding='utf-8') as f:
                 data = json.load(f)
@@ -292,23 +260,12 @@ class ListManager:
                 signatures[filename.lower()] = signature
         return signatures
 
-    def _mark_runtime_file_changed(self, filename):
-        if str(filename or '').lower() in self._loaded_enabled_files:
-            self._runtime_data_files_changed = True
+    def _note_manual_update_change(self, filename):
+        if self._manual_update_changed_files is not None:
+            self._manual_update_changed_files.add(str(filename or ''))
 
     def is_tf2bd_restart_required(self):
-        """Whether enabled player data on disk differs from the loaded snapshot."""
-        required = self._current_enabled_file_signatures() != self._loaded_file_signatures
-        if not required:
-            self._restart_prompt_suppressed = False
-        return required
-
-    def should_prompt_tf2bd_restart(self):
-        return self.is_tf2bd_restart_required() and not self._restart_prompt_suppressed
-
-    def suppress_tf2bd_restart_prompt(self):
-        if self.is_tf2bd_restart_required():
-            self._restart_prompt_suppressed = True
+        return self._current_enabled_file_signatures() != self._loaded_file_signatures
 
     def _find_list_index(self, filename):
         filename = str(filename or '').lower()
@@ -437,11 +394,6 @@ class ListManager:
             n += 1
 
     def add_custom_list(self, name, url, filename=None, enabled=True, auto_update=True):
-        """Import a remote TF2BD list transactionally.
-
-        The remote document is fetched and validated before either the list config
-        or destination JSON file is created. A failed import leaves no list entry.
-        """
         self.last_add_error = ""
         if not isinstance(url, str):
             self.last_add_error = 'Invalid URL.'
@@ -481,10 +433,10 @@ class ListManager:
         try:
             data, effective_url = self._fetch_list_data(url, filename)
 
-            # A list can advertise a canonical update_url that differs from the
-            # URL the user pasted. Keep GUI imports from creating another copy of
-            # a source that is already configured, while still allowing manually
-            # dropped files with duplicate URLs to remain untouched.
+
+
+
+
             canonical_matches = [
                 entry for entry in self.lists_config if entry.get('url') == effective_url
             ]
@@ -551,23 +503,23 @@ class ListManager:
             return
         self.lists_config[i]['last_updated'] = time.time()
         self.lists_config[i]['last_status'] = status_msg
-        # Preserve the last known good player count when an existing list fails
-        # to update. A broken URL should not make a previously loaded count vanish.
+
+
         if player_count is not None:
             self.lists_config[i]['last_player_count'] = player_count
         self._save_lists_config()
 
-    # --- end TF2BD lists config --------------------------------------------
+
 
     def load_tf2bd_data(self):
         self._reload_tf2bd_from_disk()
-        # Reconcile persisted UI metadata before any background updater starts.
-        # This clears stale update errors for lists whose updates are disabled,
-        # while keeping File missing as the higher-priority state.
+
+
+
         self.refresh_lists_from_disk()
         if self.cfg.get_bool("Auto_Update_TF2BD_Lists"):
-            # Set this before starting the thread so the UI cannot slip into the
-            # tiny window between thread creation and the worker acquiring its lock.
+
+
             self._startup_update_running = True
             try:
                 threading.Thread(
@@ -578,7 +530,6 @@ class ListManager:
                 raise
 
     def is_startup_update_running(self):
-        """Return whether the initial automatic TF2BD update is still active."""
         return bool(self._startup_update_running)
 
     def _background_update_worker(self):
@@ -586,8 +537,6 @@ class ListManager:
         messages = []
 
         try:
-            # Downloads are serialized, but the active TF2BD snapshot is deliberately
-            # left alone. Newly downloaded data is used on the next Sentry start.
             with self._update_lock:
                 try:
                     messages.extend(self.update_tf2bd_lists(respect_auto_update=True))
@@ -595,25 +544,21 @@ class ListManager:
                 except Exception as e:
                     messages.append(f"Update error: {e}")
 
+                try:
+                    self._reload_tf2bd_from_disk()
+                except Exception as e:
+                    messages.append(f"Reload error: {e}")
+
             if not messages:
                 messages.append("No lists selected for automatic updates.")
             self.last_update_status = " | ".join(m for m in messages if m)
-            # Print each result once. The previous flow printed individual update
-            # lines and then printed the same messages again as one giant summary.
             for message in messages:
                 if message:
                     print(f"[Auto-Update] {message}")
         finally:
-            # Clear this only after all startup update/config work has completed.
-            # A manager window waiting on this flag can now safely rescan disk.
             self._startup_update_running = False
 
     def download_missing_lists(self, respect_auto_update=False):
-        """Download configured lists whose local file is missing.
-
-        Startup and manual updates require both Enabled and Updates Enabled.
-        Disabled lists are intentionally left untouched until re-enabled.
-        """
         messages = []
         for entry in [dict(item) for item in self.lists_config]:
             if not entry.get('enabled', True):
@@ -647,9 +592,9 @@ class ListManager:
             info = {}
             data['file_info'] = info
 
-        # A list may move its own update endpoint. Follow any valid advertised
-        # update_url after a successful fetch. The local filename is the stable
-        # identity, so two configured files may safely point at the same source.
+
+
+
         advertised_url = self._extract_list_update_url(data)
         effective_url = advertised_url or configured_url
 
@@ -671,7 +616,7 @@ class ListManager:
 
         fpath = os.path.join(self.tf2bd_dir, filename)
         atomic_write_bytes(fpath, json.dumps(data, indent=2).encode('utf-8'))
-        self._mark_runtime_file_changed(filename)
+        self._note_manual_update_change(filename)
 
         i = self._find_list_index(filename)
         if i >= 0 and effective_url != url:
@@ -685,69 +630,59 @@ class ListManager:
         return f"Downloaded {filename} ({n_players} players)"
 
     def force_update_list(self, filename):
-        """Update one configured list
+        self.last_update_changed_count = 0
+        self._manual_update_changed_files = set()
 
-        This is an explicit per-list force update: Enabled and Updates Enabled
-        are ignored. The list only needs a valid Update URL. Missing files are
-        downloaded; existing files are refreshed.
-        """
-        self.last_update_changed_data = False
+        try:
+            i = self._find_list_index(filename)
+            if i < 0:
+                self.last_update_status = "Error: List not found."
+                return self.last_update_status
 
-        i = self._find_list_index(filename)
-        if i < 0:
-            self.last_update_status = "Error: List not found."
+            entry = dict(self.lists_config[i])
+            if not entry.get('url'):
+                self.last_update_status = "List does not have an update URL."
+                return self.last_update_status
+
+            with self._update_lock:
+                fpath = os.path.join(self.tf2bd_dir, entry.get('filename', ''))
+                if os.path.isfile(fpath):
+                    result = self._update_json_file(entry)
+                else:
+                    try:
+                        result = self._download_list_to_file(entry)
+                    except Exception as e:
+                        result = f"Failed to fetch {entry.get('name', filename)}: {e}"
+                        self._record_list_result(filename, False, result, 0)
+
+            self.last_update_status = result or ""
             return self.last_update_status
-
-        entry = dict(self.lists_config[i])
-        if not entry.get('url'):
-            self.last_update_status = "List does not have an update URL."
-            return self.last_update_status
-        with self._update_lock:
-            fpath = os.path.join(self.tf2bd_dir, entry.get('filename', ''))
-            if os.path.isfile(fpath):
-                result = self._update_json_file(entry)
-            else:
-                try:
-                    result = self._download_list_to_file(entry)
-                except Exception as e:
-                    result = f"Failed to fetch {entry.get('name', filename)}: {e}"
-                    self._record_list_result(filename, False, result, 0)
-
-        self.last_update_changed_data = str(result).startswith(("Updated ", "Downloaded "))
-        self.last_update_status = result or ""
-        return self.last_update_status
+        finally:
+            self.last_update_changed_count = len(self._manual_update_changed_files)
+            self._manual_update_changed_files = None
 
     def force_update_now(self):
-        """Update configured list files on disk
-
-        Manual updates only touch lists where both Enabled and Updates Enabled
-        are selected. The running process keeps its existing TF2BD player snapshot;
-        changed files take effect after a Sentry restart.
-        """
         messages = []
-        self.last_update_changed_data = False
+        self.last_update_changed_count = 0
+        self._manual_update_changed_files = set()
 
-        # Also notice JSON files the user may have copied into tf2bd_lists/
-        # while Sentry is running. This only updates list configuration.
-        self.sync_lists_from_disk()
+        try:
+            self.sync_lists_from_disk()
 
-        with self._update_lock:
-            try:
-                # Update files that already exist first, then fetch missing ones
-                # so a newly downloaded list is not requested twice in one run.
-                messages.extend(self.update_tf2bd_lists(respect_auto_update=True))
-                messages.extend(self.download_missing_lists(respect_auto_update=True))
-            except Exception as e:
-                messages.append(f"Error: {e}")
+            with self._update_lock:
+                try:
+                    messages.extend(self.update_tf2bd_lists(respect_auto_update=True))
+                    messages.extend(self.download_missing_lists(respect_auto_update=True))
+                except Exception as e:
+                    messages.append(f"Error: {e}")
 
-        self.last_update_changed_data = any(
-            str(msg).startswith(("Updated ", "Downloaded "))
-            for msg in messages
-        )
-        if not messages:
-            messages.append("No lists selected for updates.")
-        self.last_update_status = " | ".join(m for m in messages if m)
-        return self.last_update_status
+            if not messages:
+                messages.append("No lists selected for updates.")
+            self.last_update_status = " | ".join(m for m in messages if m)
+            return self.last_update_status
+        finally:
+            self.last_update_changed_count = len(self._manual_update_changed_files)
+            self._manual_update_changed_files = None
 
     def _reload_tf2bd_from_disk(self):
         if self._sync_config_with_existing_files():
@@ -770,21 +705,14 @@ class ListManager:
             self.tf2bd_suspicious = new_suspicious
             self.tf2bd_error = error_msg
 
-        # This is the stable player-list snapshot used for this process lifetime.
-        self._loaded_enabled_files = self._current_enabled_file_set()
         self._loaded_file_signatures = self._current_enabled_file_signatures()
-        self._runtime_data_files_changed = False
-        # Once the user declines the restart prompt, do not nag again for the
-        # same pending-restart session. This resets automatically if the disk/config
-        # state returns to the currently loaded TF2BD snapshot.
-        self._restart_prompt_suppressed = False
 
     def _read_tf2bd_lists(self):
         all_data = {}
         errors = []
 
-        # Only configured + enabled lists participate in detection. Existing
-        # files are imported into lists_config by _sync_config_with_existing_files().
+
+
         entries = [
             dict(entry) for entry in self.lists_config
             if entry.get('enabled', True) and entry.get('filename')
@@ -840,11 +768,6 @@ class ListManager:
         return all_data, err_msg
 
     def update_tf2bd_lists(self, respect_auto_update=True):
-        """Refresh list files from their configured source URLs.
-
-        A list must be Enabled and have its per-list update flag selected before
-        startup or manual bulk updates will touch it.
-        """
         messages = []
         for entry in [dict(item) for item in self.lists_config]:
             if not entry.get('enabled', True):
@@ -881,9 +804,9 @@ class ListManager:
                 resp.json(), url, filename
             )
 
-            # Normalize the existing file's update_url before comparing so an
-            # upstream endpoint migration is treated as metadata, not a player
-            # data change.
+
+
+
             metadata_url_changed = False
             if isinstance(data, dict):
                 info = data.get('file_info')
@@ -906,7 +829,7 @@ class ListManager:
                     fpath,
                     json.dumps(new_data, indent=2).encode('utf-8'),
                 )
-                self._mark_runtime_file_changed(filename)
+                self._note_manual_update_change(filename)
                 n_players = len(new_data['players'])
                 self._record_list_result(
                     filename, True,
@@ -915,9 +838,9 @@ class ListManager:
                 return f"Updated {filename}"
 
             if metadata_url_changed:
-                # Keep the local file's embedded update_url in sync with the
-                # adopted source without treating metadata-only changes as new
-                # player data that requires a restart.
+
+
+
                 atomic_write_bytes(
                     fpath,
                     json.dumps(data, indent=2).encode('utf-8'),
