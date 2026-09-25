@@ -708,19 +708,30 @@ class TF2BDListManagerWindow(QDialog):
         self._finishing = True
         restart_now = False
 
-        if self._successful_manual_updates:
+        if self.logic.lists.should_prompt_tf2bd_restart():
             from .ui_qt_dialogs import custom_popup
             count = self._successful_manual_updates
-            noun = "list" if count == 1 else "lists"
+            if count:
+                noun = "list" if count == 1 else "lists"
+                message = (
+                    f"{count} {noun} successfully updated. "
+                    "Updated list data will be active once Sentry restarts.\n\n"
+                    "Restart now?"
+                )
+            else:
+                message = (
+                    "TF2BD list changes will be active once Sentry restarts.\n\n"
+                    "Restart now?"
+                )
             restart_now = custom_popup(
                 self,
                 self.px,
                 "Restart Sentry?",
-                f"{count} {noun} successfully updated. "
-                "Updated list data will be active once Sentry restarts.\n\n"
-                "Restart now?",
+                message,
                 is_confirmation=True,
             )
+            if not restart_now:
+                self.logic.lists.suppress_tf2bd_restart_prompt()
 
         super().done(result)
 
