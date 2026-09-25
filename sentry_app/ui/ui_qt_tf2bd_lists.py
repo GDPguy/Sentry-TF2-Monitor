@@ -55,6 +55,7 @@ class TF2BDListManagerWindow(QDialog):
         self.px = px_func
         self._update_running = False
         self._finishing = False
+        self._successful_manual_updates = 0
         self._startup_waiting = self.logic.lists.is_startup_update_running()
 
         # Never rescan/edit list config while the startup updater is still writing
@@ -196,11 +197,7 @@ class TF2BDListManagerWindow(QDialog):
             self.refresh_table()
             if discovered_local_lists:
                 suffix = "list" if discovered_local_lists == 1 else "lists"
-                self._set_status(
-                    f"Found {discovered_local_lists} new local {suffix}. Restart Sentry to apply changes."
-                )
-            elif self.logic.lists.is_tf2bd_restart_required():
-                self._set_status("TF2BD list changes are pending. Restart Sentry to apply changes.")
+                self._set_status(f"Found {discovered_local_lists} new local {suffix}.")
 
     def _set_status(self, text, *, error=False, tooltip=None):
         self.status_label.setText(text)
@@ -367,10 +364,7 @@ class TF2BDListManagerWindow(QDialog):
     def _on_enabled_toggled(self, filename, checked):
         if self.logic.lists.set_list_enabled(filename, checked):
             self.refresh_table()
-            self._set_status(
-                "Enabled List. Restart Sentry to apply changes."
-                if checked else "Disabled List. Restart Sentry to apply changes."
-            )
+            self._set_status("Enabled List." if checked else "Disabled List.")
 
     def _on_auto_update_toggled(self, filename, checked):
         if self.logic.lists.set_list_auto_update(filename, checked):
@@ -452,8 +446,7 @@ class TF2BDListManagerWindow(QDialog):
                 )
             else:
                 message = (
-                    f"That Update URL is already configured for {len(matches)} lists. "
-                    "You probably don't need another copy."
+                    f"That Update URL is already configured for {len(matches)} lists."
                 )
             custom_popup(
                 self,
@@ -505,7 +498,7 @@ class TF2BDListManagerWindow(QDialog):
             return
 
         self.refresh_table()
-        self._set_status("List imported. Restart Sentry to apply changes.")
+        self._set_status("List imported.")
 
     def remove_selected(self):
         row = self.table.currentRow()
@@ -533,18 +526,14 @@ class TF2BDListManagerWindow(QDialog):
 
         if self.logic.lists.remove_list(filename):
             self.refresh_table()
-            self._set_status("List removed. Restart Sentry to apply changes.")
+            self._set_status("List removed.")
 
     def refresh_from_disk(self):
         added = self.logic.lists.refresh_lists_from_disk()
         self.refresh_table()
         if added:
             suffix = "list" if added == 1 else "lists"
-            self._set_status(
-                f"Found {added} new local {suffix}. Restart Sentry to apply changes."
-            )
-        elif self.logic.lists.is_tf2bd_restart_required():
-            self._set_status("List folder refreshed. Restart Sentry to apply changes.")
+            self._set_status(f"Found {added} new local {suffix}.")
         else:
             self._set_status("List folder refreshed.")
 
@@ -595,19 +584,16 @@ class TF2BDListManagerWindow(QDialog):
 
         if discovered_local_lists:
             suffix = "list" if discovered_local_lists == 1 else "lists"
-            text = f"Found {discovered_local_lists} new local {suffix}."
-            if self.logic.lists.is_tf2bd_restart_required():
-                text += " Restart required."
-            self._set_status(text, error=has_error, tooltip=result or None)
-        elif has_error:
-            text = "Startup list update completed with errors."
-            if self.logic.lists.is_tf2bd_restart_required():
-                text += " Restart required."
-            self._set_status(text, error=True, tooltip=result)
-        elif self.logic.lists.is_tf2bd_restart_required():
             self._set_status(
-                "Startup list update complete. Restart required.",
+                f"Found {discovered_local_lists} new local {suffix}.",
+                error=has_error,
                 tooltip=result or None,
+            )
+        elif has_error:
+            self._set_status(
+                "Startup list update completed with errors.",
+                error=True,
+                tooltip=result,
             )
         else:
             self._set_status("Startup list update complete.", tooltip=result or None)
@@ -672,25 +658,23 @@ class TF2BDListManagerWindow(QDialog):
         self.refresh_table()
 
         changed_data = bool(self.logic.lists.last_update_changed_data)
-        restart_required = self.logic.lists.is_tf2bd_restart_required()
         scope = getattr(self, "_update_scope", "all")
+
+        if changed_data:
+            self._successful_manual_updates += sum(
+                1
+                for message in result.split(" | ")
+                if message.startswith(("Updated ", "Downloaded "))
+            )
 
         lowered = result.lower()
         has_error = "error" in lowered or "failed" in lowered
 
         if has_error:
             text = "Update failed." if scope == "selected" else "Update completed with errors."
-            if restart_required:
-                text += " Restart required."
             self._set_status(text, error=True, tooltip=result)
         elif changed_data:
-            if restart_required:
-                self._set_status(
-                    "Update complete. Restart required.",
-                    tooltip=result,
-                )
-            else:
-                self._set_status("Update complete.", tooltip=result)
+            self._set_status("Update complete.", tooltip=result)
         else:
             if scope == "selected":
                 self._set_status("Selected list is already up to date.", tooltip=result)
@@ -734,18 +718,19 @@ class TF2BDListManagerWindow(QDialog):
         self._finishing = True
         restart_now = False
 
-        if self.logic.lists.should_prompt_tf2bd_restart():
+        if self._successful_manual_updates:
             from .ui_qt_dialogs import custom_popup
+            count = self._successful_manual_updates
+            noun = "list" if count == 1 else "lists"
             restart_now = custom_popup(
                 self,
                 self.px,
-                "Restart Required",
-                "TF2BD list changes are applied when Sentry starts.\n\n"
-                "Restart Sentry now?",
+                "Restart Sentry?",
+                f"{count} {noun} successfully updated. "
+                "Updated list data will be active once Sentry restarts.\n\n"
+                "Restart now?",
                 is_confirmation=True,
             )
-            if not restart_now:
-                self.logic.lists.suppress_tf2bd_restart_prompt()
 
         super().done(result)
 
