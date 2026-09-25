@@ -49,6 +49,7 @@ class ListManager:
 
         self._startup_update_running = False
         self._loaded_file_signatures = {}
+        self._suppressed_restart_state = None
         self._manual_update_changed_files = None
 
         self._ensure_dirs()
@@ -264,8 +265,30 @@ class ListManager:
         if self._manual_update_changed_files is not None:
             self._manual_update_changed_files.add(str(filename or ''))
 
+    def _tf2bd_restart_state(self):
+        return tuple(sorted(self._current_enabled_file_signatures().items()))
+
     def is_tf2bd_restart_required(self):
-        return self._current_enabled_file_signatures() != self._loaded_file_signatures
+        current = self._tf2bd_restart_state()
+        loaded = tuple(sorted(self._loaded_file_signatures.items()))
+        if current == loaded:
+            self._suppressed_restart_state = None
+            return False
+        return True
+
+    def should_prompt_tf2bd_restart(self):
+        current = self._tf2bd_restart_state()
+        loaded = tuple(sorted(self._loaded_file_signatures.items()))
+        if current == loaded:
+            self._suppressed_restart_state = None
+            return False
+        return current != self._suppressed_restart_state
+
+    def suppress_tf2bd_restart_prompt(self):
+        current = self._tf2bd_restart_state()
+        loaded = tuple(sorted(self._loaded_file_signatures.items()))
+        if current != loaded:
+            self._suppressed_restart_state = current
 
     def _find_list_index(self, filename):
         filename = str(filename or '').lower()
