@@ -33,7 +33,6 @@ COL_FILENAME = 6
 
 
 class ListEditDelegate(QStyledItemDelegate):
-    """Limit the editable local display name without changing table behavior."""
 
     def __init__(self, parent, name_limit):
         super().__init__(parent)
@@ -58,8 +57,8 @@ class TF2BDListManagerWindow(QDialog):
         self._successful_manual_updates = 0
         self._startup_waiting = self.logic.lists.is_startup_update_running()
 
-        # Never rescan/edit list config while the startup updater is still writing
-        # files and statuses. If it is already finished, reconcile immediately.
+
+
         discovered_local_lists = 0
         if not self._startup_waiting:
             discovered_local_lists = self.logic.lists.refresh_lists_from_disk()
@@ -123,7 +122,7 @@ class TF2BDListManagerWindow(QDialog):
         self.table.setColumnWidth(COL_FILENAME, self.px(190))
         self.table.itemChanged.connect(self._on_item_changed)
 
-        # Make the relationship between these controls explicit.
+
         self.table.horizontalHeaderItem(COL_ENABLED).setToolTip(
             "Controls whether this list's player data is loaded after Sentry restarts. "
             "Disabled lists are also excluded from update checks."
@@ -188,8 +187,8 @@ class TF2BDListManagerWindow(QDialog):
         self._startup_watch_timer.timeout.connect(self._check_startup_update)
 
         if self._startup_waiting:
-            # Leave the table empty instead of taking a config snapshot while the
-            # startup worker may be changing that same config in another thread.
+
+
             self._set_startup_waiting_controls(True)
             self._set_status("Startup list update in progress...")
             self._startup_watch_timer.start()
@@ -368,8 +367,8 @@ class TF2BDListManagerWindow(QDialog):
 
     def _on_auto_update_toggled(self, filename, checked):
         if self.logic.lists.set_list_auto_update(filename, checked):
-            # The table's Last Status reflects current state too (for example,
-            # File missing takes precedence over Updates disabled).
+
+
             self.refresh_table()
             self._set_status(
                 "Updates enabled for this list."
@@ -549,11 +548,6 @@ class TF2BDListManagerWindow(QDialog):
         self.btn_close.setEnabled(enabled)
 
     def _set_startup_waiting_controls(self, waiting):
-        """Freeze list/config actions while the startup updater owns list I/O.
-
-        Open Folder and Close remain usable because they do not mutate managed
-        list state or depend on the startup worker finishing.
-        """
         enabled = not waiting
         self.table.setEnabled(enabled)
         self.chk_auto_updates.setEnabled(enabled)
@@ -572,8 +566,8 @@ class TF2BDListManagerWindow(QDialog):
         self._startup_watch_timer.stop()
         self._startup_waiting = False
 
-        # The worker is fully finished now, so it is safe to reconcile deleted or
-        # manually-added files and then take one coherent table snapshot.
+
+
         discovered_local_lists = self.logic.lists.refresh_lists_from_disk()
         self.refresh_table()
         self._set_startup_waiting_controls(False)
@@ -657,15 +651,11 @@ class TF2BDListManagerWindow(QDialog):
         self._set_update_controls_enabled(True)
         self.refresh_table()
 
-        changed_data = bool(self.logic.lists.last_update_changed_data)
+        changed_count = self.logic.lists.last_update_changed_count
         scope = getattr(self, "_update_scope", "all")
 
-        if changed_data:
-            self._successful_manual_updates += sum(
-                1
-                for message in result.split(" | ")
-                if message.startswith(("Updated ", "Downloaded "))
-            )
+        if changed_count:
+            self._successful_manual_updates += changed_count
 
         lowered = result.lower()
         has_error = "error" in lowered or "failed" in lowered
@@ -673,7 +663,7 @@ class TF2BDListManagerWindow(QDialog):
         if has_error:
             text = "Update failed." if scope == "selected" else "Update completed with errors."
             self._set_status(text, error=True, tooltip=result)
-        elif changed_data:
+        elif changed_count:
             self._set_status("Update complete.", tooltip=result)
         else:
             if scope == "selected":
@@ -704,9 +694,9 @@ class TF2BDListManagerWindow(QDialog):
             self._set_status("Please wait for the list update to finish.")
             return
 
-        # The startup worker belongs to ListManager, not this dialog, so closing
-        # the manager is safe while it continues. Avoid evaluating restart state
-        # until that worker has established its final on-disk state.
+
+
+
         if self.logic.lists.is_startup_update_running():
             super().done(result)
             return
