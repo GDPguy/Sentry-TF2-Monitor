@@ -18,9 +18,10 @@ Sentry is a cross-platform tool for Team Fortress 2 to monitor in-game players i
     - Notifies party chat when new cheaters are detected/present in a server
     - Notifies party chat when players with suspicious SourceBans are detected (keyword matches e.g. "aimbot")
       - Players with suspicious SourceBans are indicated in the GUI with bold red text.
-- **User list management**
+- **User list & TF2BD list management**
   - Edit the user list directly from the GUI
   - Export your list in TF2BD format from the User List Manager for sharing
+  - manage/import your TF2BD lists
 - **Social Graph**
   - See who is friends with who
   - **Player relationships:** If Player A is friends with B, and B is friends with C, they are all identified as a single linked group. This feature is intended for Casual Mode to identify potential party stacks.
