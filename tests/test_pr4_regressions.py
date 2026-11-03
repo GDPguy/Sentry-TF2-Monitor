@@ -41,7 +41,7 @@ class PlayerPollingTests(unittest.TestCase):
         self.assertEqual(state, "timeout")
         logic._reset_state.assert_not_called()
 
-    def test_empty_lobby_does_not_mark_server_connected(self):
+    def test_empty_lobby_keeps_server_connected(self):
         logic = AppLogic.__new__(AppLogic)
         logic.state_lock = threading.RLock()
         logic.state = {"process": False, "rcon": None, "server": None, "party": None}
@@ -59,9 +59,9 @@ class PlayerPollingTests(unittest.TestCase):
             result = logic.update_state()
 
         self.assertEqual(result["rcon"], "connected")
-        self.assertFalse(result["server"]["connected"])
+        self.assertTrue(result["server"]["connected"])
 
-    def test_empty_lobby_drops_cached_connection(self):
+    def test_empty_lobby_keeps_cached_connection(self):
         logic = AppLogic.__new__(AppLogic)
         logic.state_lock = threading.RLock()
         logic.state = {
@@ -79,8 +79,9 @@ class PlayerPollingTests(unittest.TestCase):
         with patch("sentry_app.logic.TF2Monitor.is_process_running", return_value=True):
             result = logic.update_state()
 
-        self.assertIsNone(result["server"])
-        self.assertIsNone(logic.state["server"])
+        self.assertIsNotNone(result["server"])
+        self.assertTrue(result["server"]["connected"])
+        self.assertEqual(result["server"]["lobby"], ([], [], []))
 
     def test_nonempty_lobby_marks_server_connected(self):
         logic = AppLogic.__new__(AppLogic)

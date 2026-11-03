@@ -470,7 +470,7 @@ class AppLogic:
                             self.queue_chat(message, "tf_party_chat")
                     
                     lobby, rcon = self.get_players()
-                    if lobby and any(lobby):
+                    if lobby is not None:
                         server = {"ip": ip, "map": map_file_name, "connected": True, "lobby": lobby}
                     else:
                         server = {"ip": ip, "map": map_file_name, "connected": False, "lobby": lobby}
@@ -482,7 +482,7 @@ class AppLogic:
             if rcon == "connected":
                 self._process_chat_queue()
             
-            if not lobby or not any(lobby):
+            if lobby is None:
                 server = None #no players detected; something changed! Could improve by adding another 
             else:
                 server = {"ip": cached_connection["ip"], "map": cached_connection["map"], "connected": True, "lobby": lobby}
