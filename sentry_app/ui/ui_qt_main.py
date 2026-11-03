@@ -359,8 +359,14 @@ class MainWindow(DeselectableWindowMixin, QMainWindow):
             threading.Thread(target=self._data_worker, daemon=True).start()
 
     def _data_worker(self):
-        res = self.logic.update_state()
-        
+        try:
+            res = self.logic.update_state()
+        except Exception as e:
+            print(f"Error in data worker: {e}")
+            with self.logic.state_lock:
+                running = bool(self.logic.state["process"])
+            res = {"process": running, "rcon": None, "server": None, "party": None}
+
         if not self.is_closing:
             self.data_queue.put(res)
 
@@ -401,7 +407,10 @@ class MainWindow(DeselectableWindowMixin, QMainWindow):
         if not IsRunning:
             text = "Waiting for TF2 to launch" + steamid_status_msg
             self.clear_tables()
-        elif RCON_status == None:
+        elif RCON_status == 'timeout':
+            text = "RCON is not responding..." + steamid_status_msg
+            color = "orange"
+        elif RCON_status is None:
             text = "TF2 found but RCON is currently unreachable\nIf this persists, check settings > RCon Address" + steamid_status_msg
             color = "orange"
             self.clear_tables()
@@ -421,9 +430,6 @@ class MainWindow(DeselectableWindowMixin, QMainWindow):
             text = f"Connecting to server..." + steamid_status_msg + f"\n {serverdata["ip"]} - {serverdata["map"]}"
             color = "green"
             self.clear_tables()
-        elif RCON_status == 'timeout':
-            text = "RCON is not responding..." + steamid_status_msg
-            color = "orange"
         else: 
             red, blue, spec = serverdata['lobby']
             self.update_table(self.red_table['table'], red)

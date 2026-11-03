@@ -417,8 +417,8 @@ class AppLogic:
                 self.state["server"] = None
                 self.state["party"] = None
             return {"process": running, "rcon": rcon, "party": None, "server": None}
-        elif not tpd_ok or tpd_response == "__TIMEOUT__":
-            rcon = "timeout"
+        elif not tpd_ok:
+            rcon = "timeout" if tpd_response == "__TIMEOUT__" else None
             party = cached_party
             with self.state_lock:
                 self.state["rcon"] = rcon
@@ -431,12 +431,14 @@ class AppLogic:
         #making a large nested block here to reduce commands sent to RCON, improves performance on low-end machines.
         if not cached_connection or not cached_connection["map"] or not cached_connection["connected"]: #map = None indicates server/map change, meaning we need to redo connection checks.
             nc_ok, nc_response = self.rcon.execute("net_channels") #net_channels first since it has a small response.
-            if not nc_ok or nc_response == "__TIMEOUT__":
-                rcon = "timeout"
+            if not nc_ok:
+                rcon = "timeout" if nc_response == "__TIMEOUT__" else None
                 server = cached_connection
             elif not nc_response.strip():
+                rcon = "connected"
                 server = None
             else:
+                rcon = "connected"
                 ip = TF2Monitor.parse_net_channels(nc_response)
                 if not ip:
                     with self.state_lock:
@@ -447,8 +449,8 @@ class AppLogic:
                     return {"process": running, "rcon": rcon, "party": party, "server": None}
                 
                 st_ok, st_response = self.rcon.execute("dumpstringtables") #serves as a check that serverdata is now being received and also provides the map name.
-                if not st_ok or st_response == "__TIMEOUT__":
-                    rcon = "timeout"
+                if not st_ok:
+                    rcon = "timeout" if st_response == "__TIMEOUT__" else None
                     with self.state_lock:
                         self.state["process"] = running
                         self.state["rcon"] = rcon
@@ -467,7 +469,7 @@ class AppLogic:
                             message = f"[Sentry] {map_file_name} - {mapdata['contract_page']}"
                             self.queue_chat(message, "tf_party_chat")
                     
-                    lobby = self.get_players()
+                    lobby, rcon = self.get_players()
                     if lobby:
                         server = {"ip": ip, "map": map_file_name, "connected": True, "lobby": lobby}
                     else:
@@ -476,9 +478,9 @@ class AppLogic:
                     server = {"ip": ip, "map": None, "connected": False, "lobby": None}
             
         else:
-            lobby = self.get_players()
-            rcon = "connected"
-            self._process_chat_queue() #We're only going to use chat while in-game, I think this is a safe assumption.
+            lobby, rcon = self.get_players()
+            if rcon == "connected":
+                self._process_chat_queue()
             
             if not lobby:
                 server = None #no players detected; something changed! Could improve by adding another 
@@ -506,22 +508,22 @@ class AppLogic:
         if dt > 1.5:
             print(f"[DBG] g15_dumpplayer took {dt:.2f}s")
             
+        if response == "__TIMEOUT__":
+            print(f"[DBG] RCON timed out in get_players, returning cache.")
+            return (cached_red, cached_blue, cached_spec + cached_unassigned), "timeout"
+
         if not ok:
             self._reset_state()
-            return None
-
-        elif response == "__TIMEOUT__":
-            print(f"[DBG] RCON timed out in get_players, returning cache.")
-            return cached_red, cached_blue, cached_spec + cached_unassigned
+            return None, self.rcon.block_reason
         
         if not response.strip(): #should detect map changes or disconnects.
             self._reset_state() #TODO: add setting to cache playerdata until new server is detected
-            return None
+            return None, "connected"
 
         success, red, blue, spec, unassigned, local_team = TF2Monitor.parse_g15_dump(response)
 
         if not success: #this may happen if g15dump spews into other packets
-            return cached_red, cached_blue, cached_spec + cached_unassigned
+            return (cached_red, cached_blue, cached_spec + cached_unassigned), "connected"
 
         all_players = red + blue + spec + unassigned
         all_sids = [p.steamid for p in all_players]
@@ -593,7 +595,7 @@ class AppLogic:
         self.analyze_suspicious_sourcebans(all_players)
         self.check_party_announcements(all_players)
 
-        return pdata
+        return pdata, "connected"
 
     def _reset_state(self):
         with self.state_lock:

@@ -111,7 +111,7 @@ class TF2Monitor:
         if not response:
             return None
         
-        pattern_map = re.compile(r'maps\\(.*)\.bsp')
+        pattern_map = re.compile(r'maps[\\/]([^\\/\r\n]+)\.bsp', re.IGNORECASE)
 
         match = pattern_map.search(response)
         map_name = match.group(1).strip() if match else None
@@ -225,7 +225,7 @@ class TF2Monitor:
             
         pattern_queues = re.compile(r'In (\d) queues:')
         pattern_leader_id = re.compile(r'LeaderID: (\[U:\d:\d*\])')  #leader_id: (\d*) captures the leader's id64 in the body of response, sometimes we get no body though...
-        pattern_member_ids = re.compile(r'member_ids:\s*([\d,\s]+)\s') #REVIEW
+        pattern_member_ids = re.compile(r'member_ids:[ \t]*([\d, \t]+)')
         
         sQueues = pattern_queues.search(response)
         sLeader_id = pattern_leader_id.search(response)
@@ -243,8 +243,11 @@ class TF2Monitor:
         
         member_ids = []
         if member_id64s:
-            for id64 in member_id64s:
-                member_ids.append(convert_steamid64_to_steamid3(id64))
+            for group in member_id64s:
+                for id64 in re.findall(r'\d+', group):
+                    member_id = convert_steamid64_to_steamid3(id64)
+                    if member_id is not None:
+                        member_ids.append(member_id)
         
         return {"leader_id": leader_id, "member_ids": member_ids, "in_queue": queue_count} 
 
