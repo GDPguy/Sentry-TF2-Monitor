@@ -60,7 +60,7 @@ Optional:
 
 Then set the same **RCON password**/**port** inside Sentry via **Settings**.
 
-The default password 'yourpassword' should be fine. You do not necessarily need to change it.
+The default password 'yourpassword' can be changed in the settings.
 
 ## Configuration
 All settings are configurable from the **Settings** button in the GUI.
