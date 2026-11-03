@@ -14,6 +14,7 @@ import concurrent.futures
 class AppLogic:
     def __init__(self):
         self.state_lock = threading.RLock()
+        self.state = {"process": False, "rcon": None, "server": None, "party": None}
 
         self.cfg = ConfigManager()
         self.rcon = RConManager(self.cfg)
@@ -51,7 +52,6 @@ class AppLogic:
         self._last_good_g15 = 0.0
 
         self._kick_lock = threading.Lock()
-        self.tf2_running = False
 
         self.steamhistory_lock = threading.Lock()
         self.steamhistory_bans = {}
@@ -396,51 +396,132 @@ class AppLogic:
             p.marked_cheater_friends_tf2bd = len(friends & tf2bd_cheaters)
             p.marked_suspicious_friends_tf2bd = len(friends & tf2bd_suspicious)
 
-    def get_players(self):
+    def update_state(self) -> dict:
         running = TF2Monitor.is_process_running()
-        with self.state_lock:
-            self.tf2_running = running
         if not running:
             self._reset_state()
             self.rcon.reset()
-            return 'tf2_closed', [], [], []
+            return {"process": None, "rcon": None, "party": None, "server": None}
+        
+        with self.state_lock:
+            self.state["process"] = True
+            cached_connection = self.state["server"]
+            cached_party = self.state["party"]
+            
+        #Start with party & RCON checks, as there should (almost always) be a party ID.
+        tpd_ok, tpd_response = self.rcon.execute("tf_party_debug")
+        if self.rcon.block_reason:
+            rcon = self.rcon.block_reason
+            with self.state_lock:
+                self.state["rcon"] = rcon
+                self.state["server"] = None
+                self.state["party"] = None
+            return {"process": running, "rcon": rcon, "party": None, "server": None}
+        elif not tpd_ok or tpd_response == "__TIMEOUT__":
+            rcon = "timeout"
+            party = cached_party
+            with self.state_lock:
+                self.state["rcon"] = rcon
+        else:
+            party = TF2Monitor.parse_TPD(tpd_response)
+            rcon = "connected"
+            
 
-        self._process_chat_queue()
+        
+        #making a large nested block here to reduce commands sent to RCON, improves performance on low-end machines.
+        if not cached_connection or not cached_connection["map"] or not cached_connection["connected"]: #map = None indicates server/map change, meaning we need to redo connection checks.
+            nc_ok, nc_response = self.rcon.execute("net_channels") #net_channels first since it has a small response.
+            if not nc_ok or nc_response == "__TIMEOUT__":
+                rcon = "timeout"
+                server = cached_connection
+            elif not nc_response.strip():
+                server = None
+            else:
+                ip = TF2Monitor.parse_net_channels(nc_response)
+                if not ip:
+                    with self.state_lock:
+                        self.state["process"] = running
+                        self.state["rcon"] = rcon
+                        self.state["server"] = None
+                        self.state["party"] = party
+                    return {"process": running, "rcon": rcon, "party": party, "server": None}
+                
+                st_ok, st_response = self.rcon.execute("dumpstringtables") #serves as a check that serverdata is now being received and also provides the map name.
+                if not st_ok or st_response == "__TIMEOUT__":
+                    rcon = "timeout"
+                    with self.state_lock:
+                        self.state["process"] = running
+                        self.state["rcon"] = rcon
+                        self.state["party"] = party
+                    return {"process": running, "rcon": rcon, "party": party, "server": cached_connection}
 
+                mapdata = TF2Monitor.parse_dumpstringtables(st_response[:100].strip()) #map should be on first line of output (or near due to ordering jank)
+                if mapdata:
+                    map_file_name = mapdata["name"]
+                    contract_page = mapdata["contract_page"]
+                    
+                    if self.get_setting_bool("contract_helper") and (
+                    not cached_connection or (map_file_name != cached_connection["map"] and map_file_name)
+                    ):
+                        if mapdata["contract_page"]:
+                            message = f"[Sentry] {map_file_name} - {mapdata['contract_page']}"
+                            self.queue_chat(message, "tf_party_chat")
+                    
+                    lobby = self.get_players()
+                    if lobby:
+                        server = {"ip": ip, "map": map_file_name, "connected": True, "lobby": lobby}
+                    else:
+                        server = {"ip": ip, "map": map_file_name, "connected": False, "lobby": lobby}
+                else:
+                    server = {"ip": ip, "map": None, "connected": False, "lobby": None}
+            
+        else:
+            lobby = self.get_players()
+            rcon = "connected"
+            self._process_chat_queue() #We're only going to use chat while in-game, I think this is a safe assumption.
+            
+            if not lobby:
+                server = None #no players detected; something changed! Could improve by adding another 
+            else:
+                server = {"ip": cached_connection["ip"], "map": cached_connection["map"], "connected": True, "lobby": lobby}
+        
+        with self.state_lock:
+            self.state["process"] = running
+            self.state["rcon"] = rcon
+            self.state["server"] = server
+            self.state["party"] = party
+        
+        return {"process": running, "rcon": rcon, "server": server, "party": party}
+
+    def get_players(self):
+        with self.state_lock:
+            cached_red = list(self.connected_red_players)
+            cached_blue = list(self.connected_blue_players)
+            cached_spec = list(self.connected_spectator_players)
+            cached_unassigned = list(self.connected_unassigned_players)
+            
         t0 = time.monotonic()
         ok, response = self.rcon.execute("g15_dumpplayer")
         dt = time.monotonic() - t0
         if dt > 1.5:
-            print(f"g15_dumpplayer took {dt:.2f}s")
-
-        if response == "__TIMEOUT__":
-            with self.state_lock:
-                cached_red = list(self.connected_red_players)
-                cached_blue = list(self.connected_blue_players)
-                cached_spec = list(self.connected_spectator_players)
-                cached_unassigned = list(self.connected_unassigned_players)
-            return 'lobby_found', cached_red, cached_blue, cached_spec + cached_unassigned
-
-        if self.rcon.block_reason:
-            return self.rcon.block_reason, [], [], []
-
+            print(f"[DBG] g15_dumpplayer took {dt:.2f}s")
+            
         if not ok:
             self._reset_state()
-            return 'connection_failed', [], [], []
+            return None
 
-        if not response.strip():
-            self._reset_state()
-            return 'lobby_not_found', [], [], []
+        elif response == "__TIMEOUT__":
+            print(f"[DBG] RCON timed out in get_players, returning cache.")
+            return cached_red, cached_blue, cached_spec + cached_unassigned
+        
+        if not response.strip(): #should detect map changes or disconnects.
+            self._reset_state() #TODO: add setting to cache playerdata until new server is detected
+            return None
 
         success, red, blue, spec, unassigned, local_team = TF2Monitor.parse_g15_dump(response)
 
-        if not success:
-            with self.state_lock:
-                cached_red = list(self.connected_red_players)
-                cached_blue = list(self.connected_blue_players)
-                cached_spec = list(self.connected_spectator_players)
-                cached_unassigned = list(self.connected_unassigned_players)
-            return 'lobby_found', cached_red, cached_blue, cached_spec + cached_unassigned
+        if not success: #this may happen if g15dump spews into other packets
+            return cached_red, cached_blue, cached_spec + cached_unassigned
 
         all_players = red + blue + spec + unassigned
         all_sids = [p.steamid for p in all_players]
@@ -506,7 +587,7 @@ class AppLogic:
 
             self._last_good_g15 = time.monotonic()
 
-            pdata = ('lobby_found', list(red), list(blue), list(spec + unassigned))
+            pdata = (list(red), list(blue), list(spec + unassigned))
 
         self.update_sourcebans(all_sids)
         self.analyze_suspicious_sourcebans(all_players)
@@ -516,6 +597,7 @@ class AppLogic:
 
     def _reset_state(self):
         with self.state_lock:
+            self.state = {"process": False, "rcon": None, "server": None, "party": None}
             self.user_current_team = None
             self.connected_red_players = []
             self.connected_blue_players = []
@@ -749,7 +831,7 @@ class AppLogic:
         if time.monotonic() - self._last_good_g15 > 5.0:
             return
         with self.state_lock:
-            if not getattr(self, "tf2_running", False):
+            if self.state["process"] == False:
                 return
 
         if not self.automation_lock.acquire(blocking=False):

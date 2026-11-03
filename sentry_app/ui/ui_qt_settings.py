@@ -166,6 +166,10 @@ class SettingsWindow(QDialog):
         self.vars['Party_Announce_Bans'] = QCheckBox("Announce Suspicious SourceBans to Party")
         self.vars['Party_Announce_Bans'].setChecked(self.logic.get_setting_bool('Party_Announce_Bans'))
         lay_auto.addWidget(self.vars['Party_Announce_Bans'], 3, 0, 1, 4)
+        
+        self.vars['Contract_Helper'] = QCheckBox("Contract Helper")
+        self.vars['Contract_Helper'].setChecked(self.logic.get_setting_bool('Contract_Helper'))
+        lay_auto.addWidget(self.vars['Contract_Helper'], 4, 0, 1, 4)
 
         self.form_layout.addWidget(grp_auto)
 

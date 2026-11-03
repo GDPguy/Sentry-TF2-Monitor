@@ -122,7 +122,7 @@ class RConManager:
                 self.block_reason = "auth_failed"
                 return False, ""
             except ConnectionResetError:
-                print("RCON Error: Connection Reset (Server banned IP?)")
+                print("RCON Error: Connection Reset (Wrong ip? Or game is shutting down?)")
                 self.block_reason = "banned"
                 return False, ""
             except ConnectionError:

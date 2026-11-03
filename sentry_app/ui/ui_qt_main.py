@@ -71,7 +71,7 @@ class MainWindow(DeselectableWindowMixin, QMainWindow):
 
         self.nam = QNetworkAccessManager(self)
         self.icon_cache = {}
-
+        
         self.queue_timer = QTimer(self)
         self.queue_timer.timeout.connect(self.process_queue)
         self.queue_timer.start(100)
@@ -359,11 +359,8 @@ class MainWindow(DeselectableWindowMixin, QMainWindow):
             threading.Thread(target=self._data_worker, daemon=True).start()
 
     def _data_worker(self):
-        try:
-            res = self.logic.get_players()
-        except Exception as e:
-            print(f"Error in data worker: {e}")
-            res = ('connection_failed', [], [], [])
+        res = self.logic.update_state()
+        
         if not self.is_closing:
             self.data_queue.put(res)
 
@@ -379,8 +376,12 @@ class MainWindow(DeselectableWindowMixin, QMainWindow):
 
     def handle_data_result(self, result):
         if self.is_closing: return
-        status = result[0]
-
+        
+        IsRunning = result["process"]
+        RCON_status = result["rcon"]
+        serverdata = result["server"]
+        partydata = result["party"] #unused for now, could implement into player list at some point...
+        
         steamid_status_msg = ""
         using_override = self.logic.get_setting_bool('Use_Manual_SteamID')
         effective_id = self.logic.get_current_user_steamid3()
@@ -397,26 +398,34 @@ class MainWindow(DeselectableWindowMixin, QMainWindow):
 
         # steamid_status_msg will not show for connection_failed and auth_failed cases; gui only has enough room for two lines
         # cant be bothered to fix atm
-        if status == 'tf2_closed':
+        if not IsRunning:
             text = "Waiting for TF2 to launch" + steamid_status_msg
             self.clear_tables()
-        elif status == 'lobby_not_found':
+        elif RCON_status == None:
+            text = "TF2 found but RCON is currently unreachable\nIf this persists, check settings > RCon Address" + steamid_status_msg
+            color = "orange"
+            self.clear_tables()
+        elif RCON_status == 'connected' and not serverdata:
             text = f"RCON connected." + steamid_status_msg
             color = "green"
             self.clear_tables()
-        elif status == 'connection_failed':
-            text = "TF2 found but RCon is currently unreachable\nIf this persists, check settings > RCon Address" + steamid_status_msg
-            color = "orange"
-        elif status == 'banned':
+        elif RCON_status == 'banned':
             text = "RCON Banned, restart TF2 (ignore if TF2 is closing)" + steamid_status_msg
             color = "red"
             self.clear_tables()
-        elif status == 'auth_failed':
+        elif RCON_status == 'auth_failed':
             text = "RCON Error: Wrong Password.\nCheck TF2's launch options & Settings > RCon Password" + steamid_status_msg
             color = "orange"
             self.clear_tables()
-        else:
-            _, red, blue, spec = result
+        elif serverdata and not serverdata['lobby']:
+            text = f"Connecting to server..." + steamid_status_msg + f"\n {serverdata["ip"]} - {serverdata["map"]}"
+            color = "green"
+            self.clear_tables()
+        elif RCON_status == 'timeout':
+            text = "RCON is not responding..." + steamid_status_msg
+            color = "orange"
+        else: 
+            red, blue, spec = serverdata['lobby']
             self.update_table(self.red_table['table'], red)
             self.update_table(self.blue_table['table'], blue)
             self.update_table(self.spec_table['table'], spec)
@@ -424,11 +433,11 @@ class MainWindow(DeselectableWindowMixin, QMainWindow):
             total = len(red) + len(blue) + len(spec)
             player_word = "player" if total == 1 else "players"
 
-            if steamid_status_msg:
-                text = f"Connected. Monitoring {total} {player_word}. {steamid_status_msg}"
+            if steamid_status_msg: #this could probably use some UI cleanup, but it works...
+                text = f"Connected. Monitoring {total} {player_word}. {steamid_status_msg} \n{serverdata["ip"]} - {serverdata["map"]}"
                 color = "orange"
             else:
-                text = f"Connected. Monitoring {total} {player_word}."
+                text = f"Connected. Monitoring {total} {player_word}. \n{serverdata["ip"]} - {serverdata["map"]}"
                 color = "green"
 
         self.lbl_status.setText(text)
